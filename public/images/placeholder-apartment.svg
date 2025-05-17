@@ -1,0 +1,31 @@
+<svg width="600" height="400" xmlns="http://www.w3.org/2000/svg">
+    <!-- Background -->
+    <rect width="600" height="400" fill="#f3f4f6" />
+
+    <!-- Stylish building silhouette -->
+    <rect x="150" y="120" width="300" height="220" fill="#d1d5db" rx="2" />
+    <rect x="170" y="140" width="60" height="80" fill="#e5e7eb" rx="1" />
+    <rect x="250" y="140" width="60" height="80" fill="#e5e7eb" rx="1" />
+    <rect x="330" y="140" width="60" height="80" fill="#e5e7eb" rx="1" />
+    <rect x="170" y="240" width="60" height="80" fill="#e5e7eb" rx="1" />
+    <rect x="250" y="240" width="60" height="80" fill="#e5e7eb" rx="1" />
+    <rect x="330" y="240" width="60" height="80" fill="#e5e7eb" rx="1" />
+
+    <!-- Roof -->
+    <polygon points="150,120 300,60 450,120" fill="#9ca3af" />
+
+    <!-- Icon in the center -->
+    <g transform="translate(260,180)">
+        <rect x="-40" y="-40" width="80" height="80" fill="white" rx="40" opacity="0.8" />
+        <path d="M-20,-10 L0,-25 L20,-10 L20,20 L-20,20 Z" fill="#6b7280" stroke="#6b7280"
+            stroke-width="2" />
+        <rect x="-10" y="0" width="7" height="10" fill="white" />
+        <rect x="3" y="0" width="7" height="10" fill="white" />
+    </g>
+
+    <!-- Text -->
+    <text x="300" y="340" font-family="Arial, sans-serif" font-size="16" fill="#4b5563"
+        text-anchor="middle">
+        Image not available
+    </text>
+</svg> 

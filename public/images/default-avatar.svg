@@ -1,0 +1,8 @@
+<svg width="200" height="200" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+    <!-- Background circle -->
+    <circle cx="100" cy="100" r="100" fill="#1e293b" />
+
+    <!-- Avatar shape -->
+    <circle cx="100" cy="80" r="40" fill="#94a3b8" />
+    <path d="M100 130c-30 0-55 20-65 50h130c-10-30-35-50-65-50z" fill="#94a3b8" />
+</svg> 
