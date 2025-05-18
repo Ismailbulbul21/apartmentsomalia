@@ -63,18 +63,45 @@ preloadedComponents.forEach(path => {
   preloadComponent();
 });
 
-// Lazy loaded pages (with fixed imports)
-const Home = lazy(() => import('./pages/Home'));
-const Login = lazy(() => import('./pages/Login'));
-const Signup = lazy(() => import('./pages/Signup'));
-const ApartmentDetail = lazy(() => import('./pages/ApartmentDetail'));
-const OwnerDashboard = lazy(() => import('./pages/OwnerDashboard'));
-const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
-const UserProfile = lazy(() => import('./pages/UserProfile'));
-const BecomeOwner = lazy(() => import('./pages/BecomeOwner'));
-const Contact = lazy(() => import('./pages/Contact'));
-const NotFound = lazy(() => import('./pages/NotFound'));
-const WriteReview = lazy(() => import('./pages/WriteReview'));
+// Lazy loaded pages with retry logic
+const lazyWithRetry = (componentImport) => {
+  return lazy(() => {
+    return new Promise((resolve, reject) => {
+      const maxRetries = 3;
+      let retries = 0;
+      
+      function attempt() {
+        componentImport()
+          .then(resolve)
+          .catch(error => {
+            if (retries < maxRetries) {
+              retries++;
+              console.log(`Retrying import (${retries}/${maxRetries})...`);
+              setTimeout(attempt, 1000 * retries); // Increasing backoff
+            } else {
+              console.error('Component import failed after retries:', error);
+              reject(error);
+            }
+          });
+      }
+      
+      attempt();
+    });
+  });
+};
+
+// Lazy loaded pages with retry mechanism
+const Home = lazyWithRetry(() => import('./pages/Home'));
+const Login = lazyWithRetry(() => import('./pages/Login'));
+const Signup = lazyWithRetry(() => import('./pages/Signup'));
+const ApartmentDetail = lazyWithRetry(() => import('./pages/ApartmentDetail'));
+const OwnerDashboard = lazyWithRetry(() => import('./pages/OwnerDashboard'));
+const AdminDashboard = lazyWithRetry(() => import('./pages/AdminDashboard'));
+const UserProfile = lazyWithRetry(() => import('./pages/UserProfile'));
+const BecomeOwner = lazyWithRetry(() => import('./pages/BecomeOwner'));
+const Contact = lazyWithRetry(() => import('./pages/Contact'));
+const NotFound = lazyWithRetry(() => import('./pages/NotFound'));
+const WriteReview = lazyWithRetry(() => import('./pages/WriteReview'));
 
 // Protected route component with improved loading state
 const ProtectedRoute = ({ children, allowedRoles = [] }) => {

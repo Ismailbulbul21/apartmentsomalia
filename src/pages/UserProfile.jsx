@@ -25,6 +25,12 @@ export default function UserProfile() {
   const [updateSuccess, setUpdateSuccess] = useState(false);
   const [updateError, setUpdateError] = useState(null);
 
+  // Admin state
+  const [adminUsers, setAdminUsers] = useState([]);
+  const [pendingOwners, setPendingOwners] = useState([]);
+  const [apartments, setApartments] = useState([]);
+  const [adminLoading, setAdminLoading] = useState(false);
+
   // Handle location state for tab selection
   useEffect(() => {
     if (location.state?.activeTab) {
@@ -38,6 +44,9 @@ export default function UserProfile() {
       navigate('/login');
       return;
     }
+    
+    // Debug log to check user role
+    console.log('User role from auth context:', userRole);
     
     // Check owner status
     refreshOwnerStatus();
@@ -96,6 +105,56 @@ export default function UserProfile() {
     
     fetchUserData();
   }, [user]);
+
+  // Admin data fetch function
+  const fetchAdminData = async () => {
+    if (userRole !== 'admin') return;
+    
+    try {
+      setAdminLoading(true);
+      
+      // Fetch all users
+      const { data: usersData, error: usersError } = await supabase
+        .from('profiles')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (usersError) throw usersError;
+      setAdminUsers(usersData || []);
+      
+      // Fetch pending owner requests
+      const { data: ownersData, error: ownersError } = await supabase
+        .from('owner_requests')
+        .select('*, profiles(full_name, email, avatar_url)')
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false });
+      
+      if (ownersError) throw ownersError;
+      setPendingOwners(ownersData || []);
+      
+      // Fetch apartments
+      const { data: apartmentsData, error: apartmentsError } = await supabase
+        .from('apartments')
+        .select('*, profiles(full_name)')
+        .order('created_at', { ascending: false });
+      
+      if (apartmentsError) throw apartmentsError;
+      setApartments(apartmentsData || []);
+      
+    } catch (error) {
+      console.error('Error fetching admin data:', error);
+      setError(error.message);
+    } finally {
+      setAdminLoading(false);
+    }
+  };
+  
+  // Load admin data when tab is selected
+  useEffect(() => {
+    if (activeTab === 'admin' && userRole === 'admin') {
+      fetchAdminData();
+    }
+  }, [activeTab, userRole]);
 
   // Handle profile update
   const handleUpdateProfile = async (e) => {
@@ -292,6 +351,74 @@ export default function UserProfile() {
     return null;
   };
 
+  // Handle approve owner request
+  const handleApproveOwner = async (requestId) => {
+    try {
+      // First update the request
+      const { error: updateError } = await supabase
+        .from('owner_requests')
+        .update({ 
+          status: 'approved',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', requestId);
+      
+      if (updateError) throw updateError;
+      
+      // Get the user ID from the request
+      const { data: requestData } = await supabase
+        .from('owner_requests')
+        .select('user_id')
+        .eq('id', requestId)
+        .single();
+      
+      if (!requestData) throw new Error('Request not found');
+      
+      // Update the user's role to 'owner'
+      const { error: roleError } = await supabase
+        .from('profiles')
+        .update({ 
+          role: 'owner',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', requestData.user_id);
+      
+      if (roleError) throw roleError;
+      
+      // Refresh the data
+      fetchAdminData();
+      
+    } catch (error) {
+      console.error('Error approving owner:', error);
+      alert('Failed to approve owner request. Please try again.');
+    }
+  };
+  
+  // Handle reject owner request
+  const handleRejectOwner = async (requestId, reason) => {
+    const rejectionReason = prompt('Enter reason for rejection (optional):');
+    
+    try {
+      const { error } = await supabase
+        .from('owner_requests')
+        .update({ 
+          status: 'rejected',
+          rejection_reason: rejectionReason || null,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', requestId);
+      
+      if (error) throw error;
+      
+      // Refresh the data
+      fetchAdminData();
+      
+    } catch (error) {
+      console.error('Error rejecting owner:', error);
+      alert('Failed to reject owner request. Please try again.');
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-screen">
@@ -349,9 +476,11 @@ export default function UserProfile() {
                 </div>
                 <h2 className="text-xl font-semibold">{fullName || 'User'}</h2>
                 <p className="text-slate-300 text-sm truncate max-w-full">{email}</p>
+                {/* Debug role display */}
+                <p className="text-blue-300 text-xs mt-1">Role: {userRole || 'none'}</p>
               </div>
               
-              {/* Horizontal scrollable nav on mobile, vertical on desktop */}
+              {/* Mobile horizontal scrollable nav - Add admin tab conditionally */}
               <div className="md:hidden flex overflow-x-auto pb-2 mb-2 space-x-2 scrollbar-hide">
                 <button
                   onClick={() => setActiveTab('profile')}
@@ -377,6 +506,16 @@ export default function UserProfile() {
                 >
                   Messages
                 </button>
+                {userRole === 'admin' && (
+                  <button
+                    onClick={() => setActiveTab('admin')}
+                    className={`flex-shrink-0 px-4 py-2 rounded-md ${
+                      activeTab === 'admin' ? 'bg-red-600 shadow-inner' : 'bg-red-700/70'
+                    }`}
+                  >
+                    Admin
+                  </button>
+                )}
                 <button
                   onClick={handleSignOut}
                   className="flex-shrink-0 px-4 py-2 rounded-md text-red-200 bg-slate-800/50"
@@ -385,7 +524,7 @@ export default function UserProfile() {
                 </button>
               </div>
               
-              {/* Desktop navigation */}
+              {/* Desktop navigation - Add admin tab conditionally */}
               <nav className="hidden md:block space-y-1">
                 <button
                   onClick={() => setActiveTab('profile')}
@@ -411,6 +550,16 @@ export default function UserProfile() {
                 >
                   Messages
                 </button>
+                {userRole === 'admin' && (
+                  <button
+                    onClick={() => setActiveTab('admin')}
+                    className={`block w-full px-4 py-2 rounded-md text-left ${
+                      activeTab === 'admin' ? 'bg-red-600 text-white shadow-inner' : 'bg-red-700/70 text-white hover:bg-red-600/80'
+                    }`}
+                  >
+                    Admin Dashboard
+                  </button>
+                )}
                 <button
                   onClick={handleSignOut}
                   className="block w-full px-4 py-2 rounded-md text-left text-red-200 hover:bg-slate-700/50 mt-4"
@@ -639,6 +788,229 @@ export default function UserProfile() {
                   >
                     <h3 className="text-xl md:text-2xl font-semibold mb-4 md:mb-6">Messages</h3>
                     <MessagesTab userId={user.id} />
+                  </motion.div>
+                )}
+                
+                {/* New Admin tab content */}
+                {activeTab === 'admin' && userRole === 'admin' && (
+                  <motion.div
+                    key="admin"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    <h3 className="text-xl md:text-2xl font-semibold mb-4 md:mb-6 text-red-600">Admin Dashboard</h3>
+                    
+                    {adminLoading ? (
+                      <div className="flex justify-center py-8">
+                        <LoadingSpinner />
+                      </div>
+                    ) : (
+                      <div className="space-y-8">
+                        {/* Pending Owner Requests Section */}
+                        <div className="bg-white rounded-lg shadow-sm overflow-hidden border border-gray-200">
+                          <div className="bg-red-50 p-4 border-b border-red-100">
+                            <h4 className="text-lg font-medium text-red-800">Pending Owner Requests</h4>
+                          </div>
+                          
+                          {pendingOwners.length === 0 ? (
+                            <div className="p-6 text-center text-gray-500">
+                              No pending owner requests
+                            </div>
+                          ) : (
+                            <div className="overflow-x-auto">
+                              <table className="min-w-full divide-y divide-gray-200">
+                                <thead className="bg-gray-50">
+                                  <tr>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Requested</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="bg-white divide-y divide-gray-200">
+                                  {pendingOwners.map(request => (
+                                    <tr key={request.id}>
+                                      <td className="px-6 py-4 whitespace-nowrap">
+                                        <div className="flex items-center">
+                                          <div className="flex-shrink-0 h-10 w-10 rounded-full bg-gray-200 overflow-hidden">
+                                            {request.profiles?.avatar_url ? (
+                                              <img 
+                                                src={getProfileImageUrl(request.profiles.avatar_url)} 
+                                                alt={request.profiles.full_name} 
+                                                className="h-10 w-10 object-cover"
+                                                onError={(e) => {
+                                                  e.target.onerror = null;
+                                                  e.target.src = '/images/default-avatar.svg';
+                                                }}
+                                              />
+                                            ) : (
+                                              <div className="h-full w-full flex items-center justify-center bg-gray-300 text-gray-600">
+                                                {request.profiles?.full_name?.[0] || '?'}
+                                              </div>
+                                            )}
+                                          </div>
+                                          <div className="ml-4">
+                                            <div className="text-sm font-medium text-gray-900">
+                                              {request.profiles?.full_name || 'Unknown User'}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </td>
+                                      <td className="px-6 py-4 whitespace-nowrap">
+                                        <div className="text-sm text-gray-500">{request.profiles?.email || 'No email'}</div>
+                                        <div className="text-sm text-gray-500">{request.phone_number || 'No phone'}</div>
+                                      </td>
+                                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                        {new Date(request.created_at).toLocaleDateString()}
+                                      </td>
+                                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                        <button 
+                                          onClick={() => handleApproveOwner(request.id)}
+                                          className="text-green-600 hover:text-green-900 mr-4"
+                                        >
+                                          Approve
+                                        </button>
+                                        <button 
+                                          onClick={() => handleRejectOwner(request.id)}
+                                          className="text-red-600 hover:text-red-900"
+                                        >
+                                          Reject
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                        
+                        {/* Users Management Section */}
+                        <div className="bg-white rounded-lg shadow-sm overflow-hidden border border-gray-200">
+                          <div className="bg-blue-50 p-4 border-b border-blue-100">
+                            <h4 className="text-lg font-medium text-blue-800">User Management</h4>
+                          </div>
+                          
+                          <div className="overflow-x-auto">
+                            <table className="min-w-full divide-y divide-gray-200">
+                              <thead className="bg-gray-50">
+                                <tr>
+                                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
+                                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Joined</th>
+                                </tr>
+                              </thead>
+                              <tbody className="bg-white divide-y divide-gray-200">
+                                {adminUsers.slice(0, 10).map(profile => (
+                                  <tr key={profile.id}>
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                      <div className="flex items-center">
+                                        <div className="flex-shrink-0 h-10 w-10 rounded-full bg-gray-200 overflow-hidden">
+                                          {profile.avatar_url ? (
+                                            <img 
+                                              src={getProfileImageUrl(profile.avatar_url)} 
+                                              alt={profile.full_name} 
+                                              className="h-10 w-10 object-cover"
+                                              onError={(e) => {
+                                                e.target.onerror = null;
+                                                e.target.src = '/images/default-avatar.svg';
+                                              }}
+                                            />
+                                          ) : (
+                                            <div className="h-full w-full flex items-center justify-center bg-gray-300 text-gray-600">
+                                              {profile.full_name?.[0] || '?'}
+                                            </div>
+                                          )}
+                                        </div>
+                                        <div className="ml-4">
+                                          <div className="text-sm font-medium text-gray-900">
+                                            {profile.full_name || 'Unnamed User'}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                      {profile.email || 'No email'}
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
+                                        ${profile.role === 'admin' ? 'bg-red-100 text-red-800' : 
+                                          profile.role === 'owner' ? 'bg-yellow-100 text-yellow-800' : 
+                                          'bg-green-100 text-green-800'}`}>
+                                        {profile.role || 'user'}
+                                      </span>
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                      {profile.created_at ? new Date(profile.created_at).toLocaleDateString() : 'Unknown'}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                            
+                            {adminUsers.length > 10 && (
+                              <div className="px-6 py-3 bg-gray-50 text-right text-sm">
+                                <span className="text-gray-500">Showing 10 of {adminUsers.length} users</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        
+                        {/* Apartments Management Preview */}
+                        <div className="bg-white rounded-lg shadow-sm overflow-hidden border border-gray-200">
+                          <div className="bg-green-50 p-4 border-b border-green-100">
+                            <h4 className="text-lg font-medium text-green-800">Apartment Listings</h4>
+                          </div>
+                          
+                          <div className="overflow-x-auto">
+                            <table className="min-w-full divide-y divide-gray-200">
+                              <thead className="bg-gray-50">
+                                <tr>
+                                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Property</th>
+                                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Owner</th>
+                                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
+                                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                </tr>
+                              </thead>
+                              <tbody className="bg-white divide-y divide-gray-200">
+                                {apartments.slice(0, 5).map(apt => (
+                                  <tr key={apt.id}>
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                      <div className="flex items-center">
+                                        <div className="text-sm font-medium text-gray-900">
+                                          {apt.title || 'Unnamed Property'}
+                                        </div>
+                                      </div>
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                      {apt.profiles?.full_name || 'Unknown Owner'}
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                      ${apt.price_per_month}/month
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
+                                        ${apt.is_available ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                                        {apt.is_available ? 'Available' : 'Unavailable'}
+                                      </span>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                            
+                            {apartments.length > 5 && (
+                              <div className="px-6 py-3 bg-gray-50 text-right text-sm">
+                                <span className="text-gray-500">Showing 5 of {apartments.length} apartments</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </motion.div>
                 )}
               </AnimatePresence>

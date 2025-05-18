@@ -526,7 +526,7 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // Function to clear message notification display
+  // Reset notification display (called when clicking message icon)
   const clearMessageNotification = () => {
     setShowMessageNotification(false);
   };
@@ -572,12 +572,16 @@ export function AuthProvider({ children }) {
     signup,
     logout,
     becomeOwner,
-    ownerStatus,
     isAdmin,
     isOwner,
+    ownerStatus,
     refreshOwnerStatus,
+    // Special admin flag that can be checked directly
+    isAdminUser: user?.id === ADMIN_USER_ID || userRole === 'admin',
+    // Message notification features
     unreadMessages,
     showMessageNotification,
+    checkUnreadMessages,
     markAllMessagesAsRead,
     clearMessageNotification,
     refreshUserProfile: async () => {
