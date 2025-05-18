@@ -526,7 +526,7 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // Reset notification display (called when clicking message icon)
+  // Function to clear message notification display
   const clearMessageNotification = () => {
     setShowMessageNotification(false);
   };
@@ -563,29 +563,6 @@ export function AuthProvider({ children }) {
     }
   }, [user]);
 
-  // Function to sign in with Google
-  const signInWithGoogle = async () => {
-    try {
-      // Get the base URL for redirects
-      const baseUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-        ? window.location.origin
-        : 'https://sompartment.com';
-
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: baseUrl
-        }
-      });
-      
-      if (error) throw error;
-      return { success: true, data };
-    } catch (error) {
-      console.error('Google sign in error:', error);
-      return { success: false, error: error.message };
-    }
-  };
-
   const value = {
     user,
     userRole,
@@ -594,7 +571,6 @@ export function AuthProvider({ children }) {
     login,
     signup,
     logout,
-    signInWithGoogle,
     becomeOwner,
     ownerStatus,
     isAdmin,
