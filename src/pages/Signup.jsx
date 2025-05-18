@@ -69,7 +69,7 @@ export default function Signup() {
             animate={{ opacity: 1 }}
             transition={{ delay: 0.2, duration: 0.5 }}
           >
-            Join Somalia Apartments
+            Join Sompartment
           </motion.h1>
           <motion.p 
             className="mt-2 text-sm text-night-600"
@@ -109,7 +109,7 @@ export default function Signup() {
                 <div className="text-left bg-yellow-50 border border-yellow-200 p-4 rounded-lg">
                   <p className="text-yellow-800 font-medium mb-2">Important Instructions:</p>
                   <ol className="list-decimal pl-5 space-y-2 text-yellow-800">
-                    <li>Check your email inbox for a message from Somalia Apartments</li>
+                    <li>Check your email inbox for a message from Sompartment</li>
                     <li>Click the <span className="font-bold">Confirm Email</span> button or <span className="font-bold">"Aqbal"</span> in the email</li>
                     <li>If you don't see it, check your spam/junk folder</li>
                     <li>You must verify your email before you can log in</li>

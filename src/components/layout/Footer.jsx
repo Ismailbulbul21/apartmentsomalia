@@ -48,8 +48,7 @@ export default function Footer() {
       <div className="container mx-auto px-4">
         <div className="flex flex-col md:flex-row justify-between items-center">
           <div className="flex items-center mb-4 md:mb-0">
-            <span className="text-white font-bold text-lg mr-1">Modern</span>
-            <span className="text-primary-500 font-bold text-lg">Flats</span>
+            <span className="text-white font-bold text-lg">Sompartment</span>
           </div>
           
           <div className="flex space-x-6 mb-4 md:mb-0">
@@ -91,7 +90,7 @@ export default function Footer() {
         </div>
         
         <div className="mt-4 pt-4 border-t border-gray-800 flex flex-col md:flex-row justify-between items-center text-gray-500 text-xs">
-          <p>© {currentYear} Modern Flats. All rights reserved.</p>
+          <p>© {currentYear} Sompartment. All rights reserved.</p>
           <div className="mt-2 md:mt-0 flex space-x-4">
             <FooterLink to="/privacy-policy">Privacy</FooterLink>
             <FooterLink to="/terms">Terms</FooterLink>

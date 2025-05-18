@@ -658,8 +658,7 @@ export default function Header() {
         <div className="flex justify-between items-center">
           <Link to="/" className="flex items-center">
             <div className="flex items-center">
-              <span className="text-white font-bold text-xl mr-1">Modern</span>
-              <span className="text-primary-400 font-bold text-xl">Flats</span>
+              <span className="text-white font-bold text-xl">Sompartment</span>
             </div>
           </Link>
           

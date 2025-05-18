@@ -60,8 +60,7 @@ export default function Login() {
             animate={{ opacity: 1 }}
             transition={{ duration: 0.5 }}
           >
-            <span className="text-white font-bold text-2xl mr-1">Modern</span>
-            <span className="text-primary-400 font-bold text-2xl">Flats</span>
+            <span className="text-white font-bold text-2xl">Sompartment</span>
           </motion.div>
           
           <motion.h1 

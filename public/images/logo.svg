@@ -2,27 +2,40 @@
     <!-- Background shape -->
     <rect width="200" height="50" fill="none" />
 
-    <!-- Building icon -->
-    <g transform="translate(15, 5) scale(0.7)">
-        <rect x="5" y="15" width="30" height="30" fill="#00a3ff" rx="2" />
-        <rect x="10" y="20" width="8" height="8" fill="white" rx="1" />
-        <rect x="22" y="20" width="8" height="8" fill="white" rx="1" />
-        <rect x="10" y="32" width="8" height="8" fill="white" rx="1" />
-        <rect x="22" y="32" width="8" height="8" fill="white" rx="1" />
-        <polygon points="5,15 20,5 35,15" fill="#0084d6" />
+    <!-- Abstract Somali-inspired geometric logo -->
+    <g transform="translate(12, 2)">
+        <!-- Main geometric building shape - teal base -->
+        <polygon points="12,5 32,5 36,12 36,40 8,40 8,12" fill="#00897B" />
+        
+        <!-- Gold accent elements -->
+        <polygon points="12,5 32,5 28,12 16,12" fill="#FFC107" />
+        <rect x="14" y="17" width="18" height="4" fill="#FFC107" rx="1" />
+        <rect x="14" y="25" width="18" height="4" fill="#FFC107" rx="1" />
+        <rect x="14" y="33" width="18" height="4" fill="#FFC107" rx="1" />
+        
+        <!-- Burgundy decorative elements -->
+        <polygon points="8,12 16,12 16,40 8,40" fill="#880E4F" />
+        <polygon points="28,12 36,12 36,40 28,40" fill="#880E4F" />
+        
+        <!-- Traditional Somali pattern elements -->
+        <path d="M7,12 L7,40 L5,40 L5,12 Z" fill="#4DB6AC" />
+        <path d="M39,12 L39,40 L37,40 L37,12 Z" fill="#4DB6AC" />
+        
+        <!-- Abstract star element - subtle nod to Somali flag -->
+        <polygon points="22,8 24,10 22,12 20,10" fill="#FFECB3" />
     </g>
 
-    <!-- Text -->
-    <text x="60" y="25" font-family="'Plus Jakarta Sans', Arial, sans-serif" font-size="18"
-        font-weight="bold" fill="#003152">
-        Somalia
-    </text>
-    <text x="60" y="42" font-family="'Plus Jakarta Sans', Arial, sans-serif" font-size="18"
-        font-weight="bold" fill="#00a3ff">
-        Apartments
-    </text>
+    <!-- Text with unique styling -->
+    <g transform="translate(55, 25)">
+        <text font-family="'Plus Jakarta Sans', Arial, sans-serif" font-size="24" font-weight="bold">
+            <tspan fill="#880E4F">Som</tspan><tspan fill="#00897B">partment</tspan>
+        </text>
+    </g>
 
-    <!-- Accent elements -->
-    <circle cx="135" cy="17" r="2" fill="#ff8c12" />
-    <circle cx="180" cy="32" r="3" fill="#ff8c12" opacity="0.8" />
+    <!-- Decorative pattern element -->
+    <g transform="translate(170, 25)">
+        <circle cx="0" cy="0" r="8" fill="#FFC107" />
+        <path d="M0,-5 L2,-1 L6,-3 L3,1 L6,5 L1,3 L-4,5 L-1,1 L-4,-3 L0,-1 Z" 
+              fill="#00897B" />
+    </g>
 </svg> 
