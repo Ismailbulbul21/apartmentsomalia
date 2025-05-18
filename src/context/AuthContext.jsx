@@ -566,10 +566,15 @@ export function AuthProvider({ children }) {
   // Function to sign in with Google
   const signInWithGoogle = async () => {
     try {
+      // Get the base URL for redirects
+      const baseUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+        ? window.location.origin
+        : 'https://sompartment.com';
+
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: window.location.origin
+          redirectTo: baseUrl
         }
       });
       
