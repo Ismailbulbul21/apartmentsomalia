@@ -184,7 +184,7 @@ export default function Contact() {
                   </div>
                   <div className="ml-3">
                     <p className="text-sm text-gray-700">Email us at:</p>
-                    <p className="text-sm font-medium text-gray-900">support@somaliaapartments.com</p>
+                    <p className="text-sm font-medium text-gray-900">ismailbulbul381@gmail.com</p>
                   </div>
                 </div>
                 
@@ -196,7 +196,7 @@ export default function Contact() {
                   </div>
                   <div className="ml-3">
                     <p className="text-sm text-gray-700">Call or WhatsApp:</p>
-                    <p className="text-sm font-medium text-gray-900">+252 61 XXXXXXX</p>
+                    <p className="text-sm font-medium text-gray-900">+252 61 7211084</p>
                   </div>
                 </div>
               </div>
