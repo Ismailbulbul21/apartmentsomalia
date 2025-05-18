@@ -22,7 +22,7 @@ const AllListings = () => {
       const from = pageIndex * pageSize;
       const to = from + pageSize - 1;
       
-      // Build query
+      // First fetch apartments with their images
       let query = supabase
         .from('apartments')
         .select(`
@@ -37,51 +37,47 @@ const AllListings = () => {
         query = query.eq('status', status);
       }
       
-      const { data, error, count } = await query;
+      const { data: apartmentsData, error: apartmentsError, count } = await query;
       
-      if (error) throw error;
+      if (apartmentsError) throw apartmentsError;
       
-      // After fetching apartments, get owner details for each apartment
-      if (data && data.length > 0) {
-        // Get all unique owner IDs
-        const ownerIds = [...new Set(data.map(apt => apt.owner_id))];
+      // If we have apartments, fetch their owner profiles
+      if (apartmentsData && apartmentsData.length > 0) {
+        // Get all owner IDs
+        const ownerIds = apartmentsData.map(apt => apt.owner_id);
         
-        // Fetch profile data for all owners
+        // Fetch profiles for these owner IDs
         const { data: profilesData, error: profilesError } = await supabase
           .from('profiles')
           .select('id, full_name')
           .in('id', ownerIds);
+          
+        if (profilesError) throw profilesError;
         
-        if (!profilesError && profilesData) {
-          // Create a map of owner_id to profile data
-          const ownerMap = profilesData.reduce((map, profile) => {
-            map[profile.id] = profile;
-            return map;
-          }, {});
-          
-          // Add owner profile data to each apartment
-          const enrichedData = data.map(apt => ({
+        // Create a map of owner_id -> profile for easier lookup
+        const ownerProfiles = {};
+        if (profilesData) {
+          profilesData.forEach(profile => {
+            ownerProfiles[profile.id] = profile;
+          });
+        }
+        
+        // Combine apartments with their owner profiles
+        const processedData = apartmentsData.map(apt => {
+          return {
             ...apt,
-            owner_profile: ownerMap[apt.owner_id] || null
-          }));
-          
-          if (pageIndex === 0) {
-            setApartments(enrichedData || []);
-          } else {
-            setApartments(prevData => [...prevData, ...enrichedData]);
-          }
+            owner_profile: ownerProfiles[apt.owner_id] || null
+          };
+        });
+        
+        if (pageIndex === 0) {
+          setApartments(processedData);
         } else {
-          if (pageIndex === 0) {
-            setApartments(data || []);
-          } else {
-            setApartments(prevData => [...prevData, ...(data || [])]);
-          }
+          setApartments(prevData => [...prevData, ...processedData]);
         }
       } else {
         if (pageIndex === 0) {
-          setApartments(data || []);
-        } else {
-          setApartments(prevData => [...prevData, ...(data || [])]);
+          setApartments([]);
         }
       }
       
@@ -176,13 +172,19 @@ const AllListings = () => {
           .eq('apartment_id', apartmentId);
       }
       
-      // Step 6: Delete apartment images related to the apartment
+      // Step 6: Delete saved apartments references
+      await supabase
+        .from('saved_apartments')
+        .delete()
+        .eq('apartment_id', apartmentId);
+      
+      // Step 7: Delete apartment images related to the apartment
       await supabase
         .from('apartment_images')
         .delete()
         .eq('apartment_id', apartmentId);
       
-      // Step 7: Delete the apartment itself
+      // Step 8: Delete the apartment itself
       const { error } = await supabase
         .from('apartments')
         .delete()

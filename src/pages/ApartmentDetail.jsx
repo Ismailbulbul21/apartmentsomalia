@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
+import SaveButton from '../components/ui/SaveButton';
 
 // Utility function to get image URL from storage path
 const getImageUrl = (path) => {
@@ -47,11 +48,7 @@ export default function ApartmentDetail() {
   const [error, setError] = useState(null);
   const [reviews, setReviews] = useState([]);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
-  const [showContactForm, setShowContactForm] = useState(false);
-  const [message, setMessage] = useState('');
-  const [messageSending, setMessageSending] = useState(false);
-  const [messageSuccess, setMessageSuccess] = useState(false);
-  const [messageError, setMessageError] = useState(null);
+  const navigate = useNavigate();
 
   // Fetch apartment data
   useEffect(() => {
@@ -151,25 +148,20 @@ export default function ApartmentDetail() {
     fetchApartment();
   }, [id]);
 
-  // Handle sending a message to the owner
-  const handleSendMessage = async (e) => {
-    e.preventDefault();
-    
+  // Handle navigation to the messages tab in user profile
+  const handleNavigateToMessages = async () => {
     if (!user) {
-      setMessageError('You must be logged in to send messages');
+      navigate('/login', { state: { from: `/apartments/${id}` } });
       return;
     }
     
-    if (!message.trim()) {
-      setMessageError('Please enter a message');
+    if (!owner) {
+      alert('Unable to contact the owner at this time. Please try again later.');
       return;
     }
     
     try {
-      setMessageError(null);
-      setMessageSending(true);
-      
-      // Generate conversation ID
+      // First generate a conversation ID if needed
       const { data: convData, error: convError } = await supabase.rpc('generate_conversation_id', {
         p_user_id_1: user.id,
         p_user_id_2: owner.id,
@@ -178,31 +170,16 @@ export default function ApartmentDetail() {
       
       if (convError) throw convError;
       
-      // Insert message
-      const { error } = await supabase
-        .from('messages')
-        .insert({
-          conversation_id: convData,
-          apartment_id: apartment.id,
-          sender_id: user.id,
-          recipient_id: owner.id,
-          message_text: message,
-        });
-      
-      if (error) throw error;
-      
-      setMessageSuccess(true);
-      setMessage('');
-      
-      // Hide success message after 3 seconds
-      setTimeout(() => {
-        setMessageSuccess(false);
-      }, 3000);
+      // Navigate to the profile messages tab
+      navigate('/profile', { 
+        state: { 
+          activeTab: 'messages',
+          conversationId: convData
+        } 
+      });
     } catch (error) {
-      console.error('Error sending message:', error);
-      setMessageError(error.message);
-    } finally {
-      setMessageSending(false);
+      console.error('Error preparing message conversation:', error);
+      alert('Failed to prepare message conversation. Please try again.');
     }
   };
 
@@ -351,8 +328,13 @@ export default function ApartmentDetail() {
               
               {/* Right info panel */}
               <div className="lg:w-1/3 p-6 border-l border-night-700">
-                <h1 className="text-2xl font-bold mb-2">{apartment.title}</h1>
-                <p className="text-night-300 mb-4">{apartment.location_description}</p>
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h1 className="text-2xl font-bold mb-2">{apartment.title}</h1>
+                    <p className="text-night-300 mb-4">{apartment.location_description}</p>
+                  </div>
+                  <SaveButton apartmentId={apartment.id} />
+                </div>
                 
                 <div className="flex items-center mb-6">
                   <div className="flex mr-4">
@@ -400,7 +382,7 @@ export default function ApartmentDetail() {
                         </a>
                       )}
                       <button 
-                        onClick={() => setShowContactForm(!showContactForm)}
+                        onClick={handleNavigateToMessages}
                         className="flex items-center px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors"
                       >
                         <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -436,73 +418,6 @@ export default function ApartmentDetail() {
                 </div>
               </div>
             )}
-            
-            {/* Message form */}
-            <AnimatePresence>
-              {showContactForm && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  className="overflow-hidden border-t border-night-700"
-                >
-                  <div className="p-6 bg-night-900">
-                    <h3 className="text-lg font-semibold mb-4">Message the Owner</h3>
-                    
-                    {!user ? (
-                      <div className="mb-4 p-4 bg-night-800 text-night-300 rounded-lg">
-                        <p className="mb-2">You must be logged in to send messages.</p>
-                        <div className="flex gap-3">
-                          <Link to="/login" className="text-primary-400 hover:text-primary-300">
-                            Log In
-                          </Link>
-                          <span className="text-night-500">or</span>
-                          <Link to="/signup" className="text-primary-400 hover:text-primary-300">
-                            Sign Up
-                          </Link>
-                        </div>
-                      </div>
-                    ) : (
-                      <form onSubmit={handleSendMessage}>
-                        <div className="mb-4">
-                          <textarea
-                            value={message}
-                            onChange={(e) => setMessage(e.target.value)}
-                            placeholder="Write your message here..."
-                            className="w-full h-32 px-3 py-2 bg-night-800 border border-night-600 rounded-lg text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                            required
-                          ></textarea>
-                        </div>
-                        
-                        {messageError && (
-                          <div className="mb-4 p-3 bg-red-900/30 border border-red-800 text-red-200 rounded-lg">
-                            {messageError}
-                          </div>
-                        )}
-                        
-                        {messageSuccess && (
-                          <div className="mb-4 p-3 bg-green-900/30 border border-green-800 text-green-200 rounded-lg">
-                            Your message has been sent successfully!
-                          </div>
-                        )}
-                        
-                        <div className="flex justify-end">
-                          <button
-                            type="submit"
-                            disabled={messageSending}
-                            className={`px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg ${
-                              messageSending ? 'opacity-50 cursor-not-allowed' : ''
-                            }`}
-                          >
-                            {messageSending ? 'Sending...' : 'Send Message'}
-                          </button>
-                        </div>
-                      </form>
-                    )}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
           </div>
         </div>
       </div>
@@ -656,15 +571,22 @@ export default function ApartmentDetail() {
                 </div>
                 
                 {user && user.id !== apartment.owner_id && (
-                  <button 
-                    onClick={() => setShowContactForm(true)}
-                    className="w-full flex justify-center items-center px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors"
-                  >
-                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                    </svg>
-                    Contact
-                  </button>
+                  <div className="space-y-3">
+                    <button 
+                      onClick={handleNavigateToMessages}
+                      className="w-full flex justify-center items-center px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors"
+                    >
+                      <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                      </svg>
+                      Contact
+                    </button>
+                    
+                    <SaveButton 
+                      apartmentId={apartment.id} 
+                      className="w-full flex justify-center dark:bg-night-700 dark:hover:bg-night-600 dark:border-night-600"
+                    />
+                  </div>
                 )}
               </div>
             )}

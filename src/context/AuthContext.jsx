@@ -30,12 +30,15 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState(null);
+  const [userProfile, setUserProfile] = useState(null);
   const [ownerStatus, setOwnerStatus] = useState({
     isOwner: false,
     hasPendingRequest: false,
     requestStatus: null,
     rejectionReason: null
   });
+  const [unreadMessages, setUnreadMessages] = useState(0);
+  const [showMessageNotification, setShowMessageNotification] = useState(false);
 
   // Function to set user role with localStorage persistence
   const setUserRoleWithPersistence = (userId, role) => {
@@ -96,86 +99,137 @@ export function AuthProvider({ children }) {
       const cachedRole = getRoleFromLocalStorage(userId);
       if (cachedRole) {
         console.log('Found cached role:', cachedRole);
+        setUserRole(cachedRole);
       }
       
       // Special case for known admin user
       if (userId === ADMIN_USER_ID) {
         console.log('Using hardcoded admin role for known admin user');
         saveRoleToLocalStorage(userId, 'admin');
+        
+        // Get actual profile data for admin user instead of hardcoded values
+        const { data: adminProfile, error: adminProfileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .single();
+        
+        if (!adminProfileError && adminProfile) {
+          // Process avatar URL if present
+          if (adminProfile.avatar_url && adminProfile.avatar_url.trim() !== '') {
+            adminProfile.avatar_url = getProfileImageUrl(adminProfile.avatar_url);
+          } else {
+            // Explicitly set to null if empty to avoid empty string issues
+            adminProfile.avatar_url = null;
+          }
+          
+          console.log('Admin profile found:', adminProfile);
+          
+          // Return actual profile with admin role
+          return {
+            ...adminProfile,
+            role: 'admin'
+          };
+        }
+        
+        // Fallback to hardcoded values if profile fetch fails
         return { 
           id: userId,
           role: 'admin', 
-          full_name: 'ismail mohamed osman',
-          avatar_url: '/images/default-avatar.svg'
+          full_name: 'Admin User',
+          avatar_url: null // Explicitly set null
         };
       }
       
+      let profileData = null;
+      
+      // Try RPC call first
       try {
-        // Try direct SQL query using RPC to bypass RLS
         const { data: directProfile, error: directError } = await supabase.rpc('get_user_profile', {
           user_id: userId
         });
         
-        console.log('RPC get_user_profile result:', directProfile, directError);
-        
         if (!directError && directProfile && directProfile.length > 0) {
           // Extract the first item from the array
-          const profileData = directProfile[0];
-          console.log('Extracted profile data:', profileData);
-          
-          // Process avatar URL if present
-          if (profileData.avatar_url) {
-            profileData.avatar_url = getProfileImageUrl(profileData.avatar_url);
-            console.log('Processed avatar_url from RPC:', profileData.avatar_url);
-          }
-          
-          // Save to localStorage for future use
-          if (profileData.role) {
-            saveRoleToLocalStorage(userId, profileData.role);
-          }
-          
-          return profileData;
+          profileData = directProfile[0];
+        } else {
+          console.log('RPC call failed or returned no data, falling back to direct query');
         }
       } catch (rpcErr) {
-        // Silent fallback
+        console.error('RPC error:', rpcErr);
       }
       
-      // Fall back to direct query
-      const { data: profile, error } = await supabase
-        .from('profiles')
-        .select('role, full_name, avatar_url')
-        .eq('id', userId)
-        .single();
+      // If RPC failed, try direct database query as fallback
+      if (!profileData) {
+        console.log('Fetching profile directly from database');
+        const { data: directData, error: directError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .single();
+          
+        if (!directError && directData) {
+          // For direct query, we need to determine role separately
+          let role = 'user';
+          
+          // Check if user is an owner
+          const { data: ownerData } = await supabase
+            .from('owner_requests')
+            .select('status')
+            .eq('user_id', userId)
+            .eq('status', 'approved')
+            .maybeSingle();
+            
+          if (ownerData) {
+            role = 'owner';
+          }
+          
+          profileData = {
+            ...directData,
+            role
+          };
+        }
+      }
       
-      if (!error && profile) {
+      // Process the profile data
+      if (profileData) {
         // Process avatar URL if present
-        if (profile.avatar_url) {
-          profile.avatar_url = getProfileImageUrl(profile.avatar_url);
+        if (profileData.avatar_url) {
+          if (profileData.avatar_url && profileData.avatar_url.trim() !== '') {
+            profileData.avatar_url = getProfileImageUrl(profileData.avatar_url);
+          } else {
+            // Set to null to avoid empty string issues
+            profileData.avatar_url = null;
+          }
         }
         
         // Save to localStorage for future use
-        if (profile?.role) {
-          saveRoleToLocalStorage(userId, profile.role);
+        if (profileData.role) {
+          saveRoleToLocalStorage(userId, profileData.role);
+          setUserRole(profileData.role);
         }
-        return profile;
-      }
-      
-      // Use admin role as failsafe for known admin user
-      if (userId === ADMIN_USER_ID) {
-        return { role: 'admin', full_name: 'Admin User' };
+        
+        console.log('Profile data loaded successfully:', profileData);
+        return profileData;
       }
       
       // Default fallback
-      return { role: 'user', full_name: 'Default User' };
+      if (cachedRole) {
+        return { id: userId, role: cachedRole, full_name: 'User', avatar_url: null };
+      }
+      
+      return { id: userId, role: 'user', full_name: 'Default User', avatar_url: null };
     } catch (err) {
+      console.error('Profile fetch error:', err);
+      
       // Try localStorage as fallback in case of error
       const cachedRole = getRoleFromLocalStorage(userId);
       if (cachedRole) {
-        return { role: cachedRole, full_name: 'Cached User' };
+        return { id: userId, role: cachedRole, full_name: 'User', avatar_url: null };
       }
       
       // Default to user role as failsafe
-      return { role: 'user', full_name: 'Default User' };
+      return { id: userId, role: 'user', full_name: 'Default User', avatar_url: null };
     }
   };
 
@@ -209,6 +263,7 @@ export function AuthProvider({ children }) {
           if (profile) {
             setUserRoleWithPersistence(session.user.id, profile.role || 'user');
             // Store the full profile data for access across components
+            setUserProfile(profile);
             console.log('Initial profile data:', profile);
           } else {
             setUserRoleWithPersistence(session.user.id, 'user');
@@ -216,6 +271,7 @@ export function AuthProvider({ children }) {
         } else {
           setUser(null);
           setUserRole(null);
+          setUserProfile(null);
         }
       } catch (error) {
         console.error('Auth initialization error:', error);
@@ -237,12 +293,14 @@ export function AuthProvider({ children }) {
           const profile = await fetchUserProfile(session.user.id);
           if (profile) {
             setUserRoleWithPersistence(session.user.id, profile.role || 'user');
+            setUserProfile(profile);
           } else {
             setUserRoleWithPersistence(session.user.id, 'user');
           }
         } else if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
           setUser(null);
           setUserRole(null);
+          setUserProfile(null);
         } else if ((event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') && session?.user) {
           // Always update user data on token refresh
           setUser(session.user);
@@ -251,6 +309,7 @@ export function AuthProvider({ children }) {
           const profile = await fetchUserProfile(session.user.id);
           if (profile) {
             setUserRoleWithPersistence(session.user.id, profile.role || 'user');
+            setUserProfile(profile);
           } else {
             setUserRoleWithPersistence(session.user.id, 'user');
           }
@@ -262,6 +321,7 @@ export function AuthProvider({ children }) {
           const profile = await fetchUserProfile(session.user.id);
           if (profile) {
             setUserRoleWithPersistence(session.user.id, profile.role || 'user');
+            setUserProfile(profile);
           } else {
             setUserRoleWithPersistence(session.user.id, 'user');
           }
@@ -316,6 +376,7 @@ export function AuthProvider({ children }) {
       // First set state to null to prevent UI flicker
       setUser(null);
       setUserRole(null);
+      setUserProfile(null);
       setOwnerStatus({
         isOwner: false,
         hasPendingRequest: false,
@@ -424,9 +485,88 @@ export function AuthProvider({ children }) {
     return checkOwnerStatus();
   };
 
+  // Check for unread messages
+  const checkUnreadMessages = async () => {
+    if (!user?.id) return 0;
+    
+    try {
+      const { count, error } = await supabase
+        .from('messages')
+        .select('*', { count: 'exact', head: true })
+        .eq('recipient_id', user.id)
+        .eq('is_read', false);
+      
+      if (error) throw error;
+      
+      setUnreadMessages(count || 0);
+      setShowMessageNotification(count > 0);
+      
+      return count || 0;
+    } catch (error) {
+      console.error('Error checking unread messages:', error);
+      return 0;
+    }
+  };
+
+  // Function to mark all messages as read
+  const markAllMessagesAsRead = async () => {
+    if (!user?.id) return;
+    
+    try {
+      await supabase
+        .from('messages')
+        .update({ is_read: true })
+        .eq('recipient_id', user.id)
+        .eq('is_read', false);
+      
+      setUnreadMessages(0);
+      setShowMessageNotification(false);
+    } catch (error) {
+      console.error('Error marking messages as read:', error);
+    }
+  };
+
+  // Reset notification display (called when clicking message icon)
+  const clearMessageNotification = () => {
+    setShowMessageNotification(false);
+  };
+
+  // Refresh unread messages count periodically when logged in
+  useEffect(() => {
+    if (user?.id) {
+      // Check initially
+      checkUnreadMessages();
+      
+      // Set up interval to check every 30 seconds
+      const interval = setInterval(checkUnreadMessages, 30000);
+      
+      // Subscribe to message inserts for real-time notifications
+      const messageSubscription = supabase
+        .channel('public:messages')
+        .on('postgres_changes', 
+          { 
+            event: 'INSERT', 
+            schema: 'public', 
+            table: 'messages',
+            filter: `recipient_id=eq.${user.id}` 
+          },
+          () => {
+            checkUnreadMessages();
+          }
+        )
+        .subscribe();
+      
+      return () => {
+        clearInterval(interval);
+        supabase.removeChannel(messageSubscription);
+      };
+    }
+  }, [user]);
+
   const value = {
     user,
     userRole,
+    userProfile,
     loading,
     login,
     signup,
@@ -438,15 +578,124 @@ export function AuthProvider({ children }) {
     refreshOwnerStatus,
     // Special admin flag that can be checked directly
     isAdminUser: user?.id === ADMIN_USER_ID || userRole === 'admin',
+    // Message notification features
+    unreadMessages,
+    showMessageNotification,
+    checkUnreadMessages,
+    markAllMessagesAsRead,
+    clearMessageNotification,
     refreshUserProfile: async () => {
       if (user?.id) {
-        const profile = await fetchUserProfile(user.id);
-        if (profile) {
-          console.log('Manually refreshing role:', profile.role);
-          setUserRoleWithPersistence(user.id, profile.role || 'user');
-          await checkOwnerStatus();
+        try {
+          console.log('Manually refreshing profile for user:', user.id);
+          
+          // Check if we recently refreshed to prevent infinite loops
+          const now = Date.now();
+          const lastRefresh = parseInt(localStorage.getItem(`last_profile_refresh_${user.id}`)) || 0;
+          const refreshThreshold = 3000; // 3 seconds
+          
+          // Check if userProfile is already set to avoid unnecessary refreshes
+          if (userProfile && userProfile.id === user.id) {
+            // Only check timestamp if we already have a profile
+            if (now - lastRefresh < refreshThreshold) {
+              console.log('Profile refresh throttled, using existing data');
+              return userProfile;
+            }
+            
+            console.log('Profile already loaded, using existing data');
+          }
+          
+          // Update the refresh timestamp
+          localStorage.setItem(`last_profile_refresh_${user.id}`, now.toString());
+          
+          // Directly query the database for most up-to-date profile
+          const { data: profileData, error: profileError } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', user.id)
+            .single();
+          
+          if (profileError) {
+            console.error('Error fetching profile directly:', profileError);
+            
+            // Check if we already have a profile before falling back
+            if (userProfile) {
+              console.log('Using existing profile as fallback');
+              return userProfile;
+            }
+            
+            // Fall back to fetchUserProfile if direct query fails
+            const profile = await fetchUserProfile(user.id);
+            if (profile) {
+              setUserProfile(profile);
+              setUserRoleWithPersistence(user.id, profile.role || 'user');
+              return profile;
+            }
+            return null;
+          }
+          
+          // If we have profile data, determine role
+          if (profileData) {
+            // Process avatar URL
+            if (profileData.avatar_url && profileData.avatar_url.trim() !== '') {
+              profileData.avatar_url = getProfileImageUrl(profileData.avatar_url);
+            } else {
+              // Set to null if empty or undefined
+              profileData.avatar_url = null;
+            }
+            
+            // Determine user role
+            let role = 'user';
+            
+            // Admin check
+            if (user.id === ADMIN_USER_ID) {
+              role = 'admin';
+            } else {
+              // Check if user is an owner
+              const { data: ownerData } = await supabase
+                .from('owner_requests')
+                .select('status')
+                .eq('user_id', user.id)
+                .eq('status', 'approved')
+                .maybeSingle();
+                
+              if (ownerData) {
+                role = 'owner';
+              }
+            }
+            
+            // Create the full profile object
+            const fullProfile = {
+              ...profileData,
+              role
+            };
+            
+            // Update states
+            console.log('Updated profile:', fullProfile);
+            setUserRoleWithPersistence(user.id, role);
+            setUserProfile(fullProfile);
+            
+            // Also refresh other related states
+            await checkOwnerStatus();
+            await checkUnreadMessages();
+            
+            return fullProfile;
+          }
+          
+          return null;
+        } catch (err) {
+          console.error('Error refreshing user profile:', err);
+          
+          // Return existing profile if available as fallback
+          if (userProfile) {
+            console.log('Error occurred, using existing profile as fallback');
+            return userProfile;
+          }
+          
+          return null;
         }
       }
+      return userProfile || null;
     }
   };
 

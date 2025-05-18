@@ -4,7 +4,30 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://evkttwkermhcyizywzpe.supabase.co';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV2a3R0d2tlcm1oY3lpenl3enBlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDc0MTMzOTAsImV4cCI6MjA2Mjk4OTM5MH0._Dksvs00hB1wr4IyMXAlNTkj3F7khSf1QBAAwurbt1g';
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Cache configuration for better performance
+const supabaseOptions = {
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: false
+  },
+  global: {
+    fetch: (url, options) => {
+      // Set a shorter timeout
+      const timeout = 15000;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
+      
+      return fetch(url, {
+        ...options,
+        signal: controller.signal,
+      }).finally(() => clearTimeout(timeoutId));
+    }
+  }
+};
+
+// Create singleton Supabase client
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, supabaseOptions);
 
 /**
  * Helper function to upload an image to storage and create a record in apartment_images
@@ -15,16 +38,9 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
  */
 export const uploadApartmentImage = async (file, apartmentId, isPrimary = false) => {
     try {
-        console.log('Starting upload for apartment:', apartmentId, 'isPrimary:', isPrimary);
-
-        if (!file) {
-            console.error('No file provided');
-            return { success: false, error: 'No file provided' };
-        }
-
-        if (!apartmentId) {
-            console.error('No apartment ID provided');
-            return { success: false, error: 'No apartment ID provided' };
+        if (!file || !apartmentId) {
+            console.error('Missing required parameters');
+            return { success: false, error: 'Missing required parameters' };
         }
 
         // Make sure apartmentId is a valid UUID
@@ -37,7 +53,10 @@ export const uploadApartmentImage = async (file, apartmentId, isPrimary = false)
         const fileName = `${apartmentId}-${Date.now()}-${Math.floor(Math.random() * 1000)}.${fileExt}`;
         const filePath = `apartments/${fileName}`;
 
-        console.log('Uploading to path:', filePath);
+        // First, check file size and optimize if needed
+        if (file.size > 2000000) { // 2MB
+            console.warn('Large file detected, consider optimization');
+        }
 
         // Upload the file to storage
         const { data: uploadData, error: uploadError } = await supabase.storage
@@ -49,25 +68,18 @@ export const uploadApartmentImage = async (file, apartmentId, isPrimary = false)
             return { success: false, error: uploadError };
         }
 
-        console.log('Upload successful:', uploadData);
-
         // Get the public URL for verification
         const { data } = supabase.storage
             .from('apartment_images')
             .getPublicUrl(filePath);
 
-        console.log('Generated public URL:', data.publicUrl);
-
         // Create image record in the database
-        // Note: We're not including the id field, it will be generated automatically
         const imageRecord = {
             apartment_id: apartmentId,
             storage_path: filePath,
             is_primary: isPrimary,
             created_at: new Date().toISOString()
         };
-
-        console.log('Inserting image record:', imageRecord);
 
         const { data: insertData, error: imageRecordError } = await supabase
             .from('apartment_images')
@@ -76,11 +88,9 @@ export const uploadApartmentImage = async (file, apartmentId, isPrimary = false)
 
         if (imageRecordError) {
             console.error('Image record insert error:', imageRecordError);
-            // Don't delete the file from storage if the insert fails
             return { success: false, error: imageRecordError };
         }
 
-        console.log('Image record inserted successfully:', insertData);
         return { success: true, filePath, publicUrl: data.publicUrl };
     } catch (error) {
         console.error('Error in uploadApartmentImage:', error);
@@ -94,12 +104,14 @@ export const uploadApartmentImage = async (file, apartmentId, isPrimary = false)
  * @returns {string} The public URL of the image, or placeholder if not found
  */
 export const getProfileImageUrl = (path) => {
-    if (!path) {
+    if (!path || path.trim() === '') {
+        // Silent failure with default image
         return '/images/default-avatar.svg';
     }
 
     // If it's already a complete URL
     if (path.startsWith('http://') || path.startsWith('https://')) {
+        // Return as-is without logging
         return path;
     }
 
@@ -109,19 +121,24 @@ export const getProfileImageUrl = (path) => {
 
         // If path contains the bucket name, remove it for consistency
         if (path.includes('user_avatars/')) {
+            // If the path includes the bucket name already, extract just the path part
             normalizedPath = path.split('user_avatars/')[1];
-        } else if (!path.includes('/')) {
-            // If it's just a filename, assume it's in the avatars folder
-            normalizedPath = `avatars/${path}`;
         }
 
+        // Get the public URL from storage
         const { data } = supabase.storage
             .from('user_avatars')
             .getPublicUrl(normalizedPath);
-
-        return data.publicUrl || '/images/default-avatar.svg';
+        
+        if (data && data.publicUrl) {
+            return data.publicUrl;
+        } else {
+            // Only log on actual errors, not expected cases
+            console.error('Could not generate public URL for path:', path);
+            return '/images/default-avatar.svg';
+        }
     } catch (error) {
-        console.error('Error generating profile image URL:', error, path);
+        console.error('Error getting profile image URL:', error);
         return '/images/default-avatar.svg';
     }
 }; 

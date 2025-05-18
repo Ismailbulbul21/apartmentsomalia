@@ -1,13 +1,14 @@
-import { useState, useEffect, useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { supabase } from '../lib/supabase';
+import React, { useState, useEffect, useRef } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import { supabase, getProfileImageUrl } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 
 export default function UserProfile() {
   const { user, userRole, logout, ownerStatus, refreshOwnerStatus, refreshUserProfile } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [activeTab, setActiveTab] = useState('profile');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -23,6 +24,13 @@ export default function UserProfile() {
   const [updating, setUpdating] = useState(false);
   const [updateSuccess, setUpdateSuccess] = useState(false);
   const [updateError, setUpdateError] = useState(null);
+
+  // Handle location state for tab selection
+  useEffect(() => {
+    if (location.state?.activeTab) {
+      setActiveTab(location.state.activeTab);
+    }
+  }, [location.state]);
 
   // Fetch user data
   useEffect(() => {
@@ -143,6 +151,10 @@ export default function UserProfile() {
       
       // After successful update, refresh the profile in the context
       await refreshUserProfile();
+      
+      // Update local state as well
+      setAvatarUrl(updatedAvatarUrl);
+      setAvatarFile(null);
       
       // Show success message
       setUpdateSuccess(true);
@@ -282,308 +294,514 @@ export default function UserProfile() {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center min-h-[60vh]">
-        <LoadingSpinner size="lg" />
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="bg-red-100 text-red-700 p-4 rounded-md text-center">
-          <h2 className="text-xl font-semibold mb-2">Error</h2>
-          <p>{error}</p>
-          <button 
-            onClick={() => window.location.reload()} 
-            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md"
-          >
-            Try Again
-          </button>
-        </div>
+      <div className="flex justify-center items-center min-h-screen">
+        <LoadingSpinner />
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="bg-white rounded-xl shadow-md overflow-hidden">
-        <div className="p-6 bg-gray-50 border-b border-gray-200">
-          <h1 className="text-2xl font-bold text-gray-800">My Profile</h1>
-          <p className="text-gray-600">Manage your account settings and saved apartments</p>
-        </div>
-        
-        {/* Tabs */}
-        <div className="px-6 py-2 bg-white border-b border-gray-200">
-          <div className="flex space-x-4">
-            <button
-              className={`px-4 py-2 font-medium rounded-md transition-colors ${
-                activeTab === 'profile' 
-                  ? 'text-blue-600 bg-blue-50' 
-                  : 'text-gray-600 hover:text-blue-600 hover:bg-gray-50'
-              }`}
-              onClick={() => setActiveTab('profile')}
-            >
-              Profile
-            </button>
-            <button
-              className={`px-4 py-2 font-medium rounded-md transition-colors ${
-                activeTab === 'saved' 
-                  ? 'text-blue-600 bg-blue-50' 
-                  : 'text-gray-600 hover:text-blue-600 hover:bg-gray-50'
-              }`}
-              onClick={() => setActiveTab('saved')}
-            >
-              Saved Apartments
-            </button>
-            <button
-              className={`px-4 py-2 font-medium rounded-md transition-colors ${
-                activeTab === 'messages' 
-                  ? 'text-blue-600 bg-blue-50' 
-                  : 'text-gray-600 hover:text-blue-600 hover:bg-gray-50'
-              }`}
-              onClick={() => setActiveTab('messages')}
-            >
-              Messages
-            </button>
-            <button
-              className={`px-4 py-2 font-medium rounded-md transition-colors ${
-                activeTab === 'settings' 
-                  ? 'text-blue-600 bg-blue-50' 
-                  : 'text-gray-600 hover:text-blue-600 hover:bg-gray-50'
-              }`}
-              onClick={() => setActiveTab('settings')}
-            >
-              Account Settings
-            </button>
+    <div 
+      className="min-h-screen py-8 px-4 sm:px-6 lg:px-8 relative"
+      style={{
+        background: `linear-gradient(rgba(8, 12, 20, 0.88), rgba(5, 7, 12, 0.94)), 
+                    url('/dark-apartment-bg2.jpg')`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundAttachment: 'fixed',
+        backgroundRepeat: 'no-repeat',
+        boxShadow: 'inset 0 0 120px rgba(0, 0, 0, 0.8)'
+      }}
+    >
+      <div className="max-w-6xl mx-auto">
+        {error && (
+          <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6 rounded">
+            <p>{error}</p>
           </div>
-        </div>
+        )}
         
-        {/* Content area */}
-        <div className="p-6">
-          {activeTab === 'profile' && (
-            <div>
-              {/* Owner application status */}
-              <OwnerApplicationStatus />
-
-              {/* Update success message */}
-              {updateSuccess && (
-                <div className="mb-6 bg-green-100 text-green-700 p-3 rounded-md">
-                  Profile updated successfully!
+        <div className="bg-white/85 backdrop-blur-md shadow-2xl rounded-xl overflow-hidden border border-gray-800/10">
+          <div className="flex flex-col md:flex-row">
+            {/* Sidebar with user info and navigation - Now stacks on mobile */}
+            <div className="w-full md:w-1/4 bg-gradient-to-b from-slate-900 to-slate-800 p-6 text-white">
+              {/* Mobile-friendly user info section */}
+              <div className="text-center mb-6">
+                <div className="inline-block relative">
+                  <img 
+                    src={avatarUrl || '/images/default-avatar.svg'} 
+                    alt={fullName || 'User'} 
+                    className="w-20 h-20 md:w-24 md:h-24 rounded-full border-4 border-white/20 object-cover mx-auto mb-4 shadow-xl"
+                    onError={(e) => {
+                      e.target.onerror = null;
+                      e.target.src = '/images/default-avatar.svg';
+                    }}
+                  />
+                  {userRole === 'owner' && (
+                    <span className="absolute top-0 right-0 bg-yellow-500 text-xs text-black font-bold rounded-full p-1">
+                      OWNER
+                    </span>
+                  )}
+                  {userRole === 'admin' && (
+                    <span className="absolute top-0 right-0 bg-red-500 text-xs text-white font-bold rounded-full p-1">
+                      ADMIN
+                    </span>
+                  )}
+                </div>
+                <h2 className="text-xl font-semibold">{fullName || 'User'}</h2>
+                <p className="text-slate-300 text-sm truncate max-w-full">{email}</p>
+              </div>
+              
+              {/* Horizontal scrollable nav on mobile, vertical on desktop */}
+              <div className="md:hidden flex overflow-x-auto pb-2 mb-2 space-x-2 scrollbar-hide">
+                <button
+                  onClick={() => setActiveTab('profile')}
+                  className={`flex-shrink-0 px-4 py-2 rounded-md ${
+                    activeTab === 'profile' ? 'bg-slate-700 shadow-inner' : 'bg-slate-800/50'
+                  }`}
+                >
+                  Profile
+                </button>
+                <button
+                  onClick={() => setActiveTab('saved')}
+                  className={`flex-shrink-0 px-4 py-2 rounded-md ${
+                    activeTab === 'saved' ? 'bg-slate-700 shadow-inner' : 'bg-slate-800/50'
+                  }`}
+                >
+                  Saved
+                </button>
+                <button
+                  onClick={() => setActiveTab('messages')}
+                  className={`flex-shrink-0 px-4 py-2 rounded-md ${
+                    activeTab === 'messages' ? 'bg-slate-700 shadow-inner' : 'bg-slate-800/50'
+                  }`}
+                >
+                  Messages
+                </button>
+                <button
+                  onClick={handleSignOut}
+                  className="flex-shrink-0 px-4 py-2 rounded-md text-red-200 bg-slate-800/50"
+                >
+                  Sign Out
+                </button>
+              </div>
+              
+              {/* Desktop navigation */}
+              <nav className="hidden md:block space-y-1">
+                <button
+                  onClick={() => setActiveTab('profile')}
+                  className={`block w-full px-4 py-2 rounded-md text-left ${
+                    activeTab === 'profile' ? 'bg-slate-700 shadow-inner' : 'hover:bg-slate-700/50'
+                  }`}
+                >
+                  Profile Information
+                </button>
+                <button
+                  onClick={() => setActiveTab('saved')}
+                  className={`block w-full px-4 py-2 rounded-md text-left ${
+                    activeTab === 'saved' ? 'bg-slate-700 shadow-inner' : 'hover:bg-slate-700/50'
+                  }`}
+                >
+                  Saved Apartments
+                </button>
+                <button
+                  onClick={() => setActiveTab('messages')}
+                  className={`block w-full px-4 py-2 rounded-md text-left ${
+                    activeTab === 'messages' ? 'bg-slate-700 shadow-inner' : 'hover:bg-slate-700/50'
+                  }`}
+                >
+                  Messages
+                </button>
+                <button
+                  onClick={handleSignOut}
+                  className="block w-full px-4 py-2 rounded-md text-left text-red-200 hover:bg-slate-700/50 mt-4"
+                >
+                  Sign Out
+                </button>
+              </nav>
+              
+              {/* Show owner status section if applicable */}
+              {ownerStatus && ownerStatus.requestStatus !== 'approved' && (
+                <div className="mt-6 pt-6 border-t border-slate-700">
+                  <OwnerApplicationStatus />
                 </div>
               )}
-              
-              {/* Update error message */}
-              {updateError && (
-                <div className="mb-6 bg-red-100 text-red-700 p-3 rounded-md">
-                  {updateError}
-                </div>
-              )}
-              
-              {/* Profile form */}
-              <form onSubmit={handleUpdateProfile} className="space-y-6">
-                <div className="flex items-center space-x-6 mb-4">
-                  <div className="relative w-24 h-24 rounded-full overflow-hidden bg-gray-100">
-                    {avatarUrl ? (
-                      <img 
-                        src={avatarUrl} 
-                        alt={fullName || 'User Avatar'} 
-                        className="object-cover w-full h-full"
-                      />
-                    ) : (
-                      <div className="flex items-center justify-center w-full h-full text-2xl text-gray-400">
-                        {fullName ? fullName.charAt(0).toUpperCase() : 'U'}
-                      </div>
-                    )}
-                    
-                    <label 
-                      htmlFor="avatar" 
-                      className="absolute bottom-0 w-full py-1 bg-black bg-opacity-50 text-white text-xs text-center cursor-pointer"
-                    >
-                      Change
-                    </label>
-                    <input 
-                      type="file"
-                      id="avatar"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={handleAvatarChange}
-                    />
-                  </div>
-                  
-                  <div>
-                    <h2 className="text-xl font-semibold">{fullName || 'No Name Set'}</h2>
-                    <p className="text-gray-500">{user.email}</p>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <div>
-                    <label htmlFor="fullName" className="block text-sm font-medium text-gray-700 mb-1">
-                      Full Name
-                    </label>
-                    <input
-                      id="fullName"
-                      type="text"
-                      value={fullName}
-                      onChange={(e) => setFullName(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="Your full name"
-                    />
-                  </div>
-                  
-                  <div>
-                    <label htmlFor="whatsappNumber" className="block text-sm font-medium text-gray-700 mb-1">
-                      WhatsApp Number
-                    </label>
-                    <input
-                      id="whatsappNumber"
-                      type="text"
-                      value={whatsappNumber}
-                      onChange={(e) => setWhatsappNumber(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="e.g. +252 61 1234567"
-                    />
-                    <p className="mt-1 text-xs text-gray-500">
-                      Add your WhatsApp number for easier communication with property owners
-                    </p>
-                  </div>
-                </div>
-                
-                <div className="flex justify-between pt-4">
-                  <button
-                    type="submit"
-                    disabled={updating}
-                    className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex items-center"
-                  >
-                    {updating && (
-                      <svg className="animate-spin -ml-1 mr-3 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                    )}
-                    Update Profile
-                  </button>
-                  
-                  <button
-                    type="button"
-                    onClick={handleSignOut}
-                    className="px-6 py-2 bg-red-50 text-red-700 rounded-md hover:bg-red-100 transition-colors"
-                  >
-                    Sign Out
-                  </button>
-                </div>
-              </form>
             </div>
-          )}
-          
-          {activeTab === 'saved' && (
-            <div className="space-y-6">
-              <h2 className="text-xl font-semibold">Saved Apartments</h2>
-              
-              {savedApartments.length === 0 ? (
-                <div className="bg-gray-50 p-6 rounded-lg text-center">
-                  <p className="text-gray-600 mb-4">You haven't saved any apartments yet.</p>
-                  <Link
-                    to="/"
-                    className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors inline-block"
+            
+            {/* Main content area */}
+            <div className="w-full md:w-3/4 p-4 md:p-6">
+              <AnimatePresence mode="wait">
+                {activeTab === 'profile' && (
+                  <motion.div
+                    key="profile"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.3 }}
                   >
-                    Browse Apartments
-                  </Link>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {savedApartments.map((item) => (
-                    <div key={item.id} className="bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm">
-                      <Link to={`/apartments/${item.apartment_id}`}>
-                        <div className="h-40 bg-gray-200 relative">
-                          {item.apartments.apartment_images?.[0]?.storage_path ? (
-                            <img
-                              src={supabase.storage.from('apartment_images').getPublicUrl(
-                                item.apartments.apartment_images[0].storage_path
-                              ).data.publicUrl}
-                              alt={item.apartments.title}
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <div className="flex items-center justify-center h-full text-gray-400">
-                              No Image Available
-                            </div>
-                          )}
-                          {!item.apartments.is_available && (
-                            <div className="absolute top-0 right-0 bg-red-500 text-white text-xs px-2 py-1 m-2 rounded">
-                              Not Available
-                            </div>
-                          )}
+                    <h3 className="text-xl md:text-2xl font-semibold mb-4 md:mb-6">Profile Information</h3>
+                    
+                    {/* Profile form */}
+                    <form onSubmit={handleUpdateProfile}>
+                      <div className="space-y-4">
+                        <div>
+                          <label htmlFor="fullName" className="block text-sm font-medium text-gray-700">
+                            Full Name
+                          </label>
+                          <input
+                            type="text"
+                            id="fullName"
+                            value={fullName}
+                            onChange={(e) => setFullName(e.target.value)}
+                            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                          />
                         </div>
-                      </Link>
-                      
-                      <div className="p-4">
-                        <Link to={`/apartments/${item.apartment_id}`}>
-                          <h3 className="font-medium text-lg mb-1 hover:text-blue-600 transition-colors">
-                            {item.apartments.title}
-                          </h3>
-                        </Link>
-                        <p className="text-sm text-gray-500 mb-2">{item.apartments.location_description}</p>
-                        <div className="flex justify-between items-center mb-3">
-                          <div className="font-semibold text-lg">${item.apartments.price_per_month}/month</div>
-                          <div className="text-sm text-gray-500">
-                            {item.apartments.rooms} bed • {item.apartments.bathrooms} bath
+                        
+                        <div>
+                          <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                            Email
+                          </label>
+                          <input
+                            type="email"
+                            id="email"
+                            value={email}
+                            readOnly
+                            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 bg-gray-50"
+                          />
+                          <p className="mt-1 text-sm text-gray-500">Email cannot be changed</p>
+                        </div>
+                        
+                        <div>
+                          <label htmlFor="whatsapp" className="block text-sm font-medium text-gray-700">
+                            WhatsApp Number
+                          </label>
+                          <input
+                            type="text"
+                            id="whatsapp"
+                            value={whatsappNumber}
+                            onChange={(e) => setWhatsappNumber(e.target.value)}
+                            placeholder="+1234567890"
+                            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                          />
+                        </div>
+                        
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">
+                            Profile Photo
+                          </label>
+                          <div className="mt-2 flex items-center">
+                            <div className="w-16 h-16 rounded-full overflow-hidden bg-gray-100 mr-4 shadow-md">
+                              <img
+                                src={avatarUrl || '/images/default-avatar.svg'}
+                                alt="Profile"
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  e.target.onerror = null;
+                                  e.target.src = '/images/default-avatar.svg';
+                                }}
+                              />
+                            </div>
+                            <label className="cursor-pointer bg-white rounded-md font-medium text-primary-600 hover:text-primary-500 focus-within:outline-none">
+                              <span>Change</span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={handleAvatarChange}
+                                className="sr-only"
+                              />
+                            </label>
                           </div>
                         </div>
-                        <div className="flex justify-between">
-                          <Link
-                            to={`/apartments/${item.apartment_id}`}
-                            className="text-blue-600 text-sm hover:underline"
-                          >
-                            View Details
-                          </Link>
-                          <button
-                            onClick={() => handleRemoveSaved(item.id)}
-                            className="text-red-600 text-sm hover:underline"
-                          >
-                            Remove
-                          </button>
-                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+                      
+                      <div className="mt-6">
+                        <button
+                          type="submit"
+                          disabled={updating}
+                          className={`w-full py-3 px-4 border border-transparent rounded-md shadow-sm text-white text-base bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 ${
+                            updating ? 'opacity-75 cursor-not-allowed' : ''
+                          }`}
+                        >
+                          {updating ? 'Updating...' : 'Update Profile'}
+                        </button>
+                      </div>
+                      
+                      {updateSuccess && (
+                        <div className="mt-4 bg-green-50 border-l-4 border-green-400 p-4 text-green-700">
+                          Profile updated successfully!
+                        </div>
+                      )}
+                      
+                      {updateError && (
+                        <div className="mt-4 bg-red-50 border-l-4 border-red-400 p-4 text-red-700">
+                          {updateError}
+                        </div>
+                      )}
+                    </form>
+                  </motion.div>
+                )}
+                
+                {activeTab === 'saved' && (
+                  <motion.div
+                    key="saved"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    <h3 className="text-xl md:text-2xl font-semibold mb-4 md:mb-6">Saved Apartments</h3>
+                    
+                    {/* Saved apartments list */}
+                    {savedApartments.length === 0 ? (
+                      <div className="bg-gray-50 rounded-lg p-6 text-center">
+                        <p className="text-gray-500">You haven't saved any apartments yet.</p>
+                        <Link
+                          to="/"
+                          className="mt-4 inline-block text-primary-600 hover:text-primary-700"
+                        >
+                          Browse Apartments
+                        </Link>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+                        {savedApartments.map((item, index) => (
+                          <motion.div 
+                            key={item.id} 
+                            className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow"
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.3, delay: index * 0.1 }}
+                            whileHover={{ y: -5 }}
+                          >
+                            <div className="flex flex-col sm:flex-row h-full">
+                              <div className="w-full sm:w-1/3 h-32 sm:h-auto overflow-hidden">
+                                <img
+                                  src={
+                                    item.apartments.apartment_images?.length
+                                      ? supabase.storage
+                                          .from('apartment_images')
+                                          .getPublicUrl(item.apartments.apartment_images[0].storage_path).data.publicUrl
+                                      : '/placeholder-apartment.jpg'
+                                  }
+                                  alt={item.apartments.title}
+                                  className="w-full h-full object-cover transition-transform hover:scale-110 duration-300"
+                                  onError={(e) => { e.target.src = '/placeholder-apartment.jpg'; }}
+                                />
+                              </div>
+                              
+                              <div className="p-4 flex flex-col justify-between flex-grow">
+                                <div>
+                                  <h4 className="font-medium text-gray-900 mb-1 truncate">
+                                    {item.apartments.title}
+                                  </h4>
+                                  <p className="text-sm text-gray-500 mb-2">{item.apartments.location_description}</p>
+                                  <div className="flex items-center text-sm text-gray-700 flex-wrap">
+                                    <span className="font-semibold">${item.apartments.price_per_month}</span>
+                                    <span className="mx-1">/month</span>
+                                    <span className="mx-2">•</span>
+                                    <span>{item.apartments.rooms} rooms</span>
+                                    <span className="mx-2">•</span>
+                                    <span>{item.apartments.bathrooms} baths</span>
+                                  </div>
+                                </div>
+                                
+                                <div className="flex justify-between items-center mt-4">
+                                  <Link 
+                                    to={`/apartments/${item.apartment_id}`} 
+                                    className="text-blue-600 text-sm hover:text-blue-800 transition-colors"
+                                  >
+                                    View Details
+                                  </Link>
+                                  <motion.button
+                                    onClick={() => handleRemoveSaved(item.id)}
+                                    className="text-red-600 text-sm hover:underline"
+                                    whileHover={{ scale: 1.05 }}
+                                    whileTap={{ scale: 0.95 }}
+                                  >
+                                    Remove
+                                  </motion.button>
+                                </div>
+                              </div>
+                            </div>
+                          </motion.div>
+                        ))}
+                      </div>
+                    )}
+                  </motion.div>
+                )}
+                
+                {activeTab === 'messages' && (
+                  <motion.div
+                    key="messages"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    <h3 className="text-xl md:text-2xl font-semibold mb-4 md:mb-6">Messages</h3>
+                    <MessagesTab userId={user.id} />
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
-          )}
-          
-          {activeTab === 'messages' && (
-            <MessagesTab userId={user.id} />
-          )}
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-// Messages component for regular users
+// Messages component with animations
 const MessagesTab = ({ userId }) => {
+  const location = useLocation();
   const [conversations, setConversations] = useState([]);
   const [selectedConversation, setSelectedConversation] = useState(null);
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState(null);
   const messagesEndRef = useRef(null);
+  const [showScrollBtn, setShowScrollBtn] = useState(false);
+  const messageContainerRef = useRef(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [userHasScrolled, setUserHasScrolled] = useState(false);
+  const [prevMessagesLength, setPrevMessagesLength] = useState(0);
+  const [showConversations, setShowConversations] = useState(true);
   
+  // Toggle between conversations list and messages on mobile
+  const toggleConversationList = () => {
+    setShowConversations(!showConversations);
+  };
+  
+  // On mobile, when conversation is selected, hide the list
+  useEffect(() => {
+    if (selectedConversation && window.innerWidth < 768) {
+      setShowConversations(false);
+    }
+  }, [selectedConversation]);
+  
+  // Reset to showing conversations when no conversation is selected
+  useEffect(() => {
+    if (!selectedConversation) {
+      setShowConversations(true);
+    }
+  }, [selectedConversation]);
+  
+  // Handle back button on mobile
+  const handleBackToConversations = () => {
+    setShowConversations(true);
+  };
+
   // Scroll to bottom of messages
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
   }
 
+  // Initial conversations load
   useEffect(() => {
-    scrollToBottom();
+    const loadInitialData = async () => {
+      setInitialLoading(true);
+      await fetchConversations();
+      setInitialLoading(false);
+    };
+    
+    loadInitialData();
+  }, [userId]);
+
+  // Handle conversation selection from sessionStorage (from notification)
+  useEffect(() => {
+    // Only run after conversations are loaded
+    if (!initialLoading && conversations.length > 0) {
+      const notificationConvId = sessionStorage.getItem('selected_conversation_id');
+      const fromNotification = sessionStorage.getItem('from_notification');
+      
+      if (notificationConvId && fromNotification === 'true') {
+        const conversation = conversations.find(c => c.id === notificationConvId);
+        if (conversation) {
+          // First clear loading states to prevent flickering
+          setLoading(false);
+          setIsRefreshing(false);
+          
+          // Set the conversation and scroll settings
+          setSelectedConversation(conversation);
+          setUserHasScrolled(false);
+          setPrevMessagesLength(0);
+          
+          // Clear the sessionStorage to prevent reselecting on refresh
+          sessionStorage.removeItem('selected_conversation_id');
+          sessionStorage.removeItem('from_notification');
+        }
+      }
+    }
+  }, [initialLoading, conversations]);
+
+  // Modified: Only auto-scroll when new messages are added or on initial load
+  useEffect(() => {
+    if (messages.length > 0 && !loading) {
+      // Only auto-scroll if:
+      // 1. New messages were added (messages.length > prevMessagesLength)
+      // 2. This is initial load (prevMessagesLength === 0)
+      // 3. User hasn't manually scrolled up
+      if (messages.length > prevMessagesLength || prevMessagesLength === 0 || !userHasScrolled) {
+        scrollToBottom();
+      }
+      
+      // Update previous message length for next comparison
+      setPrevMessagesLength(messages.length);
+    }
+  }, [messages, prevMessagesLength, userHasScrolled, loading]);
+
+  // Check if scroll button should appear
+  useEffect(() => {
+    const checkScrollPosition = () => {
+      if (!messageContainerRef.current) return;
+      
+      const { scrollTop, scrollHeight, clientHeight } = messageContainerRef.current;
+      const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
+      
+      // Show scroll button only if not near bottom and have enough messages
+      setShowScrollBtn(!isNearBottom && messages.length > 5);
+      
+      // Track if user has scrolled up
+      if (!isNearBottom && scrollTop > 0) {
+        setUserHasScrolled(true);
+      } else if (isNearBottom) {
+        // Reset when user is at the bottom again
+        setUserHasScrolled(false);
+      }
+    };
+    
+    const container = messageContainerRef.current;
+    if (container) {
+      container.addEventListener('scroll', checkScrollPosition);
+      return () => container.removeEventListener('scroll', checkScrollPosition);
+    }
   }, [messages]);
 
+  // Reset userHasScrolled when changing conversations
+  useEffect(() => {
+    if (selectedConversation) {
+      // Clear any existing messages to prevent flashing
+      setMessages([]);
+      
+      // Reset scroll state when changing conversations
+      setUserHasScrolled(false);
+      setPrevMessagesLength(0);
+      setLoading(true);
+      
+      // Fetch messages for the selected conversation
+      fetchMessages(selectedConversation.id);
+    }
+  }, [selectedConversation?.id]); // Only trigger on ID change, not full object
+
   const fetchConversations = async () => {
+    if (isRefreshing) return;
+
     try {
       setLoading(true);
+      setIsRefreshing(true);
       
       // Fetch the conversations with apartment data
       const { data: conversationsData, error: conversationsError } = await supabase
@@ -597,44 +815,97 @@ const MessagesTab = ({ userId }) => {
       
       if (conversationsError) throw conversationsError;
       
-      if (conversationsData && conversationsData.length > 0) {
-        // Extract all unique participant IDs
+      if (conversationsData) {
+        // Get all participant IDs to fetch profiles
         const participantIds = new Set();
-        const ownerIds = new Set();
         
         conversationsData.forEach(conv => {
-          participantIds.add(conv.participant_one);
-          participantIds.add(conv.participant_two);
-          if (conv.apartments && conv.apartments.owner_id) {
-            ownerIds.add(conv.apartments.owner_id);
+          if (conv.participant_one !== userId) {
+            participantIds.add(conv.participant_one);
+          }
+          if (conv.participant_two !== userId) {
+            participantIds.add(conv.participant_two);
           }
         });
         
         // Fetch profiles for all participants
         const { data: profilesData, error: profilesError } = await supabase
           .from('profiles')
-          .select('id, full_name, avatar_url')
+          .select('*')
           .in('id', Array.from(participantIds));
-          
+        
         if (profilesError) throw profilesError;
         
-        // Create a map of profiles by ID for easy lookup
+        // Create a map of profiles by ID
         const profilesMap = (profilesData || []).reduce((map, profile) => {
+          // Process avatar URL if present
+          if (profile.avatar_url) {
+            if (profile.avatar_url && profile.avatar_url.trim() !== '') {
+              profile.avatar_url = getProfileImageUrl(profile.avatar_url);
+            } else {
+              // If empty string, set to null so we can handle it properly in the UI
+              profile.avatar_url = null;
+            }
+          }
           map[profile.id] = profile;
           return map;
         }, {});
         
-        // Add profile data to conversations
-        const enrichedConversations = conversationsData.map(conv => ({
-          ...conv,
-          profiles: {
-            participant_one_fkey: profilesMap[conv.participant_one] || null,
-            participant_two_fkey: profilesMap[conv.participant_two] || null,
-            owner_profile: profilesMap[conv.apartments?.owner_id] || null
+        // Add participant data to each conversation
+        const enrichedData = await Promise.all(conversationsData.map(async (conv) => {
+          // Determine the other participant
+          const otherParticipantId = conv.participant_one === userId 
+            ? conv.participant_two 
+            : conv.participant_one;
+          
+          // Get profile for the other participant
+          const otherParticipant = profilesMap[otherParticipantId];
+          
+          // Process avatar URL if available
+          let participantAvatar = null;
+          if (otherParticipant && otherParticipant.avatar_url) {
+            // Use the getProfileImageUrl helper to ensure proper URL format
+            if (otherParticipant.avatar_url && otherParticipant.avatar_url.trim() !== '') {
+              participantAvatar = getProfileImageUrl(otherParticipant.avatar_url);
+            }
           }
+
+          // Make a new participant object with safe avatar URL
+          const safeParticipant = otherParticipant ? {
+            ...otherParticipant,
+            avatar_url: participantAvatar
+          } : null;
+          
+          // Get the last message for preview
+          const { data: lastMessageData, error: lastMessageError } = await supabase
+            .from('messages')
+            .select('*')
+            .eq('conversation_id', conv.id)
+            .order('created_at', { ascending: false })
+            .limit(1);
+          
+          // Count unread messages
+          const { count: unreadCount, error: countError } = await supabase
+            .from('messages')
+            .select('*', { count: 'exact', head: true })
+            .eq('conversation_id', conv.id)
+            .eq('recipient_id', userId)
+            .eq('is_read', false);
+          
+          const lastMessage = lastMessageData && lastMessageData.length > 0 
+            ? lastMessageData[0] 
+            : null;
+          
+          return {
+            ...conv,
+            otherParticipant: safeParticipant,
+            lastMessage,
+            unreadCount: unreadCount || 0,
+            hasUnread: (unreadCount || 0) > 0
+          };
         }));
         
-        setConversations(enrichedConversations);
+        setConversations(enrichedData);
       } else {
         setConversations([]);
       }
@@ -643,46 +914,18 @@ const MessagesTab = ({ userId }) => {
       setError(error.message);
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
     }
   };
 
-  // Fetch conversations initially and set up refresh
-  useEffect(() => {
-    fetchConversations();
-    
-    // Set up realtime subscription for conversations
-    const conversationsSubscription = supabase
-      .channel('public:conversations')
-      .on('postgres_changes', 
-        { 
-          event: '*', 
-          schema: 'public', 
-          table: 'conversations',
-          filter: `participant_one=eq.${userId}` 
-        },
-        () => {
-          fetchConversations();
-        }
-      )
-      .on('postgres_changes', 
-        { 
-          event: '*', 
-          schema: 'public', 
-          table: 'conversations',
-          filter: `participant_two=eq.${userId}` 
-        },
-        () => {
-          fetchConversations();
-        }
-      )
-      .subscribe();
-    
-    return () => {
-      supabase.removeChannel(conversationsSubscription);
-    };
-  }, [userId]);
-
   const fetchMessages = async (conversationId) => {
+    if (!conversationId) {
+      console.log('No conversation ID provided to fetchMessages');
+      setMessages([]);
+      setLoading(false);
+      return;
+    }
+    
     try {
       // Fetch the messages
       const { data: messagesData, error: messagesError } = await supabase
@@ -699,21 +942,33 @@ const MessagesTab = ({ userId }) => {
         
         const { data: profilesData, error: profilesError } = await supabase
           .from('profiles')
-          .select('id, full_name')
+          .select('id, full_name, avatar_url')
           .in('id', senderIds);
         
         if (profilesError) throw profilesError;
         
         // Create a map of profiles by ID
         const profilesMap = (profilesData || []).reduce((map, profile) => {
-          map[profile.id] = profile;
+          // Process avatar URL if present
+          let avatarUrl = null;
+          if (profile.avatar_url) {
+            if (profile.avatar_url && profile.avatar_url.trim() !== '') {
+              avatarUrl = getProfileImageUrl(profile.avatar_url);
+            }
+          }
+          
+          map[profile.id] = {
+            ...profile,
+            avatar_url: avatarUrl
+          };
           return map;
         }, {});
         
         // Add profiles to messages
         const enrichedMessages = messagesData.map(msg => ({
           ...msg,
-          profiles: profilesMap[msg.sender_id] || null
+          profiles: profilesMap[msg.sender_id] || { full_name: 'Unknown User', avatar_url: null },
+          isUnread: msg.recipient_id === userId && !msg.is_read
         }));
         
         setMessages(enrichedMessages);
@@ -723,55 +978,88 @@ const MessagesTab = ({ userId }) => {
     } catch (error) {
       console.error('Error fetching messages:', error);
       setMessages([]);
+      setError(`Failed to load messages: ${error.message}`);
+    } finally {
+      setLoading(false);
     }
   };
 
+  // Set up subscription for message updates
   useEffect(() => {
     if (!selectedConversation) return;
     
-    fetchMessages(selectedConversation.id);
-    
-    // Set up realtime subscription for new messages
-    const messagesSubscription = supabase
-      .channel('public:messages')
-      .on('postgres_changes', 
-        { 
-          event: 'INSERT', 
-          schema: 'public', 
-          table: 'messages',
-          filter: `conversation_id=eq.${selectedConversation.id}` 
-        },
-        () => {
-          // Fetch the full message with profile data
-          fetchMessages(selectedConversation.id);
-        }
-      )
-      .subscribe();
+    try {
+      // Set up realtime subscription for new messages
+      const messagesSubscription = supabase
+        .channel(`messages-${selectedConversation.id}`)
+        .on('postgres_changes', 
+          { 
+            event: 'INSERT', 
+            schema: 'public', 
+            table: 'messages',
+            filter: `conversation_id=eq.${selectedConversation.id}` 
+          },
+          (payload) => {
+            // When a new message comes in, only fetch if it's from the other user
+            // (our own messages are already in the UI)
+            if (payload.new && payload.new.sender_id !== userId) {
+              console.log('Real-time new message received:', payload.new);
+              fetchMessages(selectedConversation.id);
+            }
+          }
+        )
+        .subscribe();
 
-    // Also update read status for messages in this conversation
-    const updateReadStatus = async () => {
-      try {
-        await supabase
-          .from('messages')
-          .update({ is_read: true })
-          .eq('conversation_id', selectedConversation.id)
-          .eq('recipient_id', userId);
-      } catch (error) {
-        console.error('Error updating read status:', error);
-      }
-    };
-    
-    updateReadStatus();
-    
-    return () => {
-      supabase.removeChannel(messagesSubscription);
-    };
+      // Also update read status for messages in this conversation
+      const updateReadStatus = async () => {
+        try {
+          const { error } = await supabase
+            .from('messages')
+            .update({ is_read: true })
+            .eq('conversation_id', selectedConversation.id)
+            .eq('recipient_id', userId)
+            .eq('is_read', false); // Only update unread messages
+            
+          if (error) {
+            console.error('Error updating read status:', error);
+          } else {
+            // Refresh conversations to update unread counts - but don't trigger a full refresh
+            setConversations(prev => 
+              prev.map(conv => 
+                conv.id === selectedConversation.id 
+                  ? { ...conv, hasUnread: false, unreadCount: 0 }
+                  : conv
+              )
+            );
+          }
+        } catch (error) {
+          console.error('Error updating read status:', error);
+        }
+      };
+      
+      // Mark messages as read
+      updateReadStatus();
+      
+      return () => {
+        // Clean up subscription when component unmounts or conversation changes
+        supabase.removeChannel(messagesSubscription);
+      };
+    } catch (error) {
+      console.error('Error setting up conversation:', error);
+      setError('Failed to load messages. Please try again.');
+    }
   }, [selectedConversation, userId]);
 
   const handleSendMessage = async (e) => {
     e.preventDefault();
     
     if (!newMessage.trim() || !selectedConversation) return;
+    
+    // Store message text before clearing input
+    const messageText = newMessage.trim();
+    
+    // Clear input field right away for better UX
+    setNewMessage('');
     
     try {
       const otherParticipantId = 
@@ -780,54 +1068,103 @@ const MessagesTab = ({ userId }) => {
           : selectedConversation.participant_one;
       
       // Optimistically update the UI
+      const tempId = `temp-${Date.now()}`;
       const tempMessage = {
-        id: `temp-${Date.now()}`,
+        id: tempId,
         conversation_id: selectedConversation.id,
         sender_id: userId,
         recipient_id: otherParticipantId,
-        message_text: newMessage,
+        message_text: messageText,
         apartment_id: selectedConversation.apartment_id,
         created_at: new Date().toISOString(),
         is_read: false,
         profiles: { 
-          full_name: 'You'
+          full_name: 'You',
+          avatar_url: null // Explicitly set to null to prevent errors
         }
       };
+      
+      // Reset userHasScrolled to ensure auto-scroll when sending new messages
+      setUserHasScrolled(false);
       
       // Update UI immediately
       setMessages(current => [...current, tempMessage]);
       
-      // Clear input field right away
-      setNewMessage('');
+      // Scroll to bottom after sending (even before server response)
+      setTimeout(scrollToBottom, 50);
       
-      // Send to database
-      const { error } = await supabase
+      // Send to database (don't await this to prevent blocking UI)
+      supabase
         .from('messages')
         .insert({
           conversation_id: selectedConversation.id,
           sender_id: userId,
           recipient_id: otherParticipantId,
-          message_text: newMessage,
+          message_text: messageText,
           apartment_id: selectedConversation.apartment_id
+        })
+        .select()
+        .then(({ data, error }) => {
+          if (error) {
+            console.error('Error inserting message:', error);
+            // Remove the temporary message if there was an error
+            setMessages(current => current.filter(msg => msg.id !== tempId));
+            throw error;
+          }
+          
+          // Success case - replace temp message with real one if needed
+          if (data && data[0]) {
+            setMessages(current => 
+              current.map(msg => msg.id === tempId ? 
+                {...data[0], profiles: { full_name: 'You', avatar_url: null }} : msg
+              )
+            );
+          }
+          
+          // Update conversation last updated time (don't wait for this)
+          return supabase
+            .from('conversations')
+            .update({ updated_at: new Date().toISOString() })
+            .eq('id', selectedConversation.id);
+        })
+        .then(() => {
+          // Don't trigger a full fetch - this causes the UI glitches
+          // Instead, just update the local state of this conversation
+          setConversations(prev => {
+            const updatedConvs = prev.map(c => {
+              if (c.id === selectedConversation.id) {
+                return {
+                  ...c,
+                  lastMessage: {
+                    message_text: messageText,
+                    created_at: new Date().toISOString(),
+                    sender_id: userId
+                  },
+                  updated_at: new Date().toISOString()
+                };
+              }
+              return c;
+            });
+            
+            // Sort conversations by updated_at
+            return [...updatedConvs].sort((a, b) => 
+              new Date(b.updated_at) - new Date(a.updated_at)
+            );
+          });
+        })
+        .catch(err => {
+          console.error('Error in message transaction:', err);
+          alert('Could not send your message. Please try again later.');
         });
-      
-      if (error) throw error;
-      
-      // Also update conversation's updated_at field
-      await supabase
-        .from('conversations')
-        .update({ updated_at: new Date().toISOString() })
-        .eq('id', selectedConversation.id);
-      
-      // Update conversations list to reflect the new message
-      fetchConversations();
+        
     } catch (error) {
       console.error('Error sending message:', error);
-      alert('Failed to send message. Please try again.');
+      // Show a more user-friendly error
+      alert('Could not send your message. Please try again later.');
     }
   };
 
-  if (loading) {
+  if (loading && initialLoading) {
     return <LoadingSpinner size="lg" />;
   }
 
@@ -841,132 +1178,376 @@ const MessagesTab = ({ userId }) => {
 
   // Helper function to display the other participant's name (apartment owner)
   const getOwnerName = (conversation) => {
-    if (!conversation.profiles) return 'Owner';
+    if (!conversation?.otherParticipant) return 'Owner';
+    return conversation.otherParticipant.full_name || 'Owner';
+  };
+
+  // Format date for messages
+  const formatMessageTime = (dateString) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const isToday = date.toDateString() === now.toDateString();
     
-    // Get the other participant (not the current user)
-    if (conversation.participant_one === userId) {
-      return conversation.profiles.participant_two_fkey?.full_name || 'Owner';
+    if (isToday) {
+      return date.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
     } else {
-      return conversation.profiles.participant_one_fkey?.full_name || 'Owner';
+      return date.toLocaleDateString([], {month: 'short', day: 'numeric'}) + 
+             ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
     }
   };
 
   return (
-    <div>
-      <h2 className="text-xl font-semibold mb-6">My Messages</h2>
-      <div className="flex h-[500px] rounded-lg overflow-hidden border border-gray-200">
-        {/* Conversations List */}
-        <div className="w-1/3 bg-gray-50 border-r border-gray-200 overflow-y-auto">
-          <div className="p-4 border-b border-gray-200">
-            <h3 className="font-medium text-gray-800">Conversations</h3>
-          </div>
-          
-          {conversations.length === 0 ? (
-            <div className="p-4 text-center text-gray-500">
-              <p>You have no message conversations yet.</p>
-              <p className="mt-2 text-sm">Start a conversation by contacting an apartment owner!</p>
+    <div className="relative">
+      <div className="bg-white shadow-lg rounded-lg overflow-hidden border border-gray-200">
+        <div className="flex h-[500px] md:h-[600px]">
+          {/* Conversations List - Left Panel (hidden on mobile when viewing a conversation) */}
+          <div className={`${
+            showConversations ? 'block' : 'hidden'
+          } md:block w-full md:w-1/3 border-r border-gray-200 bg-gray-50 flex flex-col`}>
+            <div className="p-3 md:p-4 border-b border-gray-200 bg-white">
+              <h3 className="font-medium text-lg text-gray-800">Conversations</h3>
             </div>
-          ) : (
-            <div>
-              {conversations.map((conversation) => (
-                <div 
-                  key={conversation.id}
-                  className={`p-3 cursor-pointer border-b border-gray-100 hover:bg-gray-100 transition-colors ${
-                    selectedConversation?.id === conversation.id ? 'bg-blue-50' : ''
-                  }`}
-                  onClick={() => setSelectedConversation(conversation)}
-                >
-                  <div className="flex justify-between items-center">
-                    <h3 className="font-medium text-gray-800">
-                      {getOwnerName(conversation)}
-                    </h3>
-                    <span className="text-xs text-gray-500">
-                      {new Date(conversation.updated_at).toLocaleDateString()}
-                    </span>
-                  </div>
-                  <p className="text-sm text-gray-600 truncate mt-1">
-                    {conversation.apartments?.title || 'Unknown property'}
-                  </p>
+            
+            <div className="overflow-y-auto flex-grow">
+              {loading && (
+                <div className="p-8 flex justify-center">
+                  <LoadingSpinner />
                 </div>
+              )}
+              
+              {!loading && conversations.length === 0 && (
+                <div className="p-6 text-center text-gray-500">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto text-gray-300 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                  </svg>
+                  <p className="mb-3">No conversations yet</p>
+                  <Link 
+                    to="/"
+                    className="inline-flex items-center text-blue-600 hover:text-blue-700"
+                  >
+                    <span>Browse apartments</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                    </svg>
+                  </Link>
+                </div>
+              )}
+              
+              {!loading && conversations.map((conversation) => (
+                <motion.div 
+                  key={conversation.id}
+                  className={`p-3 md:p-4 border-b border-gray-200 cursor-pointer transition-colors duration-150 
+                    ${selectedConversation?.id === conversation.id 
+                      ? 'bg-blue-50' 
+                      : 'hover:bg-gray-100'
+                    }
+                    ${conversation.hasUnread 
+                      ? 'border-l-4 border-l-blue-500' 
+                      : 'border-l-4 border-l-transparent'
+                    }`}
+                  onClick={() => setSelectedConversation(conversation)}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <div className="flex items-center mb-1">
+                    <div className="w-10 h-10 rounded-full bg-gray-300 flex-shrink-0 flex items-center justify-center text-white font-bold overflow-hidden">
+                      {conversation.otherParticipant?.avatar_url ? (
+                        <img 
+                          src={conversation.otherParticipant.avatar_url}
+                          alt={getOwnerName(conversation)}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            e.target.onerror = null;
+                            e.target.src = '/images/default-avatar.svg';
+                          }}
+                        />
+                      ) : (
+                        getOwnerName(conversation).charAt(0).toUpperCase()
+                      )}
+                    </div>
+                    <div className="ml-3 flex-grow overflow-hidden">
+                      <h4 className={`font-medium truncate ${conversation.hasUnread ? 'text-black' : 'text-gray-700'}`}>
+                        {getOwnerName(conversation)}
+                      </h4>
+                      <p className="text-xs text-gray-500 truncate">
+                        {conversation.apartments?.title || 'Unknown property'}
+                      </p>
+                    </div>
+                    {conversation.lastMessage && (
+                      <div className="text-xs text-gray-500 flex-shrink-0">
+                        {new Date(conversation.lastMessage.created_at).toLocaleDateString([], {
+                          month: 'short',
+                          day: 'numeric'
+                        })}
+                      </div>
+                    )}
+                  </div>
+                  
+                  {conversation.lastMessage && (
+                    <div className="mt-1 pl-13">
+                      <p className={`text-sm text-gray-600 truncate ${conversation.hasUnread ? 'font-medium' : ''}`}>
+                        {conversation.lastMessage.sender_id === userId ? 'You: ' : ''}
+                        {conversation.lastMessage.message_text}
+                      </p>
+                    </div>
+                  )}
+                  
+                  {conversation.hasUnread && (
+                    <div className="flex justify-end mt-1">
+                      <div className="bg-blue-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                        {conversation.unreadCount}
+                      </div>
+                    </div>
+                  )}
+                </motion.div>
               ))}
             </div>
-          )}
-        </div>
-        
-        {/* Message Area */}
-        <div className="w-2/3 flex flex-col bg-white">
-          {selectedConversation ? (
-            <>
-              <div className="p-4 border-b border-gray-200 flex justify-between items-center">
-                <div>
-                  <h3 className="font-medium text-gray-800">
-                    {getOwnerName(selectedConversation)}
-                  </h3>
-                  <p className="text-sm text-gray-600">
-                    {selectedConversation.apartments?.title || 'Unknown property'}
-                  </p>
+          </div>
+          
+          {/* Messages Area - Right Panel (full width on mobile) */}
+          <div className={`${
+            showConversations ? 'hidden' : 'block'
+          } md:block w-full md:w-2/3 flex flex-col`}>
+            {selectedConversation ? (
+              <>
+                {/* Conversation Header */}
+                <div className="p-3 md:p-4 border-b border-gray-200 flex items-center bg-white">
+                  {/* Back button - Only on mobile */}
+                  <button 
+                    onClick={handleBackToConversations}
+                    className="md:hidden mr-2 text-gray-500"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    </svg>
+                  </button>
+                  
+                  <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white mr-3 overflow-hidden">
+                    {selectedConversation.otherParticipant?.avatar_url ? (
+                      <img 
+                        src={selectedConversation.otherParticipant.avatar_url}
+                        alt={getOwnerName(selectedConversation)}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          e.target.onerror = null;
+                          e.target.src = '/images/default-avatar.svg';
+                        }}
+                      />
+                    ) : (
+                      getOwnerName(selectedConversation).charAt(0).toUpperCase()
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-medium text-gray-800 truncate">
+                      {getOwnerName(selectedConversation)}
+                    </h3>
+                    <p className="text-xs text-gray-500 truncate">
+                      {selectedConversation.apartments?.title || 'Unknown property'}
+                    </p>
+                  </div>
+                  <div className="ml-auto">
+                    <Link 
+                      to={`/apartments/${selectedConversation.apartment_id}`}
+                      className="text-sm text-blue-600 hover:text-blue-700 flex items-center"
+                    >
+                      <span className="hidden sm:inline-block">View property</span>
+                      <span className="sm:hidden">View</span>
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                    </Link>
+                  </div>
                 </div>
-              </div>
-              
-              <div className="flex-grow p-4 overflow-y-auto">
-                {messages.length === 0 ? (
-                  <div className="text-center text-gray-500 my-8">
-                    <p>No messages yet. Start the conversation!</p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {messages.map((msg) => (
-                      <div 
-                        key={msg.id}
-                        className={`flex ${msg.sender_id === userId ? 'justify-end' : 'justify-start'}`}
+                
+                {/* Messages */}
+                <div 
+                  className="flex-grow p-3 md:p-4 overflow-y-auto bg-gradient-to-b from-gray-50 to-white"
+                  ref={messageContainerRef}
+                >
+                  {messages.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-full text-gray-500">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-gray-300 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                      </svg>
+                      <p className="text-center mb-2">No messages yet</p>
+                      <p className="text-center text-sm">Start the conversation by sending a message below</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {messages.map((msg, index) => {
+                        if (!msg || !msg.created_at) return null;
+                        
+                        // Group messages by day
+                        const showDateDivider = index === 0 || 
+                          new Date(msg.created_at).toDateString() !== 
+                          new Date(messages[index-1]?.created_at || '').toDateString();
+                        
+                        return (
+                          <React.Fragment key={msg.id || `msg-${index}`}>
+                            {showDateDivider && (
+                              <div className="flex justify-center my-4">
+                                <div className="bg-gray-200 text-gray-600 text-xs px-3 py-1 rounded-full">
+                                  {new Date(msg.created_at).toLocaleDateString([], {
+                                    weekday: 'short',
+                                    month: 'short', 
+                                    day: 'numeric'
+                                  })}
+                                </div>
+                              </div>
+                            )}
+                            
+                            <motion.div 
+                              className={`flex ${msg.sender_id === userId ? 'justify-end' : 'justify-start'}`}
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ duration: 0.2 }}
+                            >
+                              {/* Show avatar for recipient's messages */}
+                              {msg.sender_id !== userId && (
+                                <div className="w-8 h-8 rounded-full bg-gray-300 flex-shrink-0 mr-2 flex items-center justify-center text-white font-medium text-xs overflow-hidden">
+                                  {msg.profiles?.avatar_url ? (
+                                    <img 
+                                      src={msg.profiles.avatar_url}
+                                      alt={msg.profiles?.full_name || 'User'}
+                                      className="w-full h-full object-cover"
+                                      onError={(e) => {
+                                        e.target.onerror = null;
+                                        e.target.src = '/images/default-avatar.svg';
+                                      }}
+                                    />
+                                  ) : (
+                                    (msg.profiles?.full_name || 'U').charAt(0).toUpperCase()
+                                  )}
+                                </div>
+                              )}
+                              
+                              <div 
+                                className={`relative max-w-[85%] md:max-w-[75%] rounded-lg px-3 md:px-4 py-2 shadow-sm
+                                  ${msg.sender_id === userId 
+                                    ? 'bg-blue-600 text-white rounded-br-none' 
+                                    : msg.isUnread
+                                      ? 'bg-indigo-50 border-l-4 border-indigo-500 text-gray-800 rounded-bl-none'
+                                      : 'bg-gray-100 text-gray-800 rounded-bl-none'
+                                  }`}
+                              >
+                                {/* Show name for recipient's messages */}
+                                {msg.sender_id !== userId && (
+                                  <div className="text-xs font-medium mb-1">
+                                    {msg.profiles?.full_name || 'User'}
+                                  </div>
+                                )}
+                                
+                                <p className="whitespace-pre-wrap break-words text-sm">
+                                  {msg.message_text || ''}
+                                </p>
+                                
+                                <div className={`text-xs mt-1 flex items-center justify-end
+                                  ${msg.sender_id === userId ? 'text-blue-200' : 'text-gray-500'}`}
+                                >
+                                  {formatMessageTime(msg.created_at)}
+                                  
+                                  {/* Read status for sender's messages */}
+                                  {msg.sender_id === userId && (
+                                    <span className="ml-1">
+                                      {msg.is_read ? (
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                        </svg>
+                                      ) : (
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h.01M12 12h.01M19 12h.01M6 12a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0z" />
+                                        </svg>
+                                      )}
+                                    </span>
+                                  )}
+                                </div>
+                                
+                                {/* Unread indicator */}
+                                {msg.isUnread && (
+                                  <div className="absolute top-0 right-0 transform -translate-y-1/2 translate-x-1/2">
+                                    <div className="w-3 h-3 rounded-full bg-indigo-500"></div>
+                                  </div>
+                                )}
+                              </div>
+                            </motion.div>
+                          </React.Fragment>
+                        );
+                      })}
+                      <div ref={messagesEndRef} />
+                    </div>
+                  )}
+                  
+                  {/* Scroll to bottom button */}
+                  <AnimatePresence>
+                    {showScrollBtn && (
+                      <motion.button 
+                        className="absolute bottom-24 right-4 bg-blue-600 text-white rounded-full p-2 shadow-md"
+                        onClick={scrollToBottom}
+                        initial={{ opacity: 0, scale: 0.8 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.8 }}
+                        whileHover={{ scale: 1.1 }}
+                        whileTap={{ scale: 0.9 }}
                       >
-                        <div 
-                          className={`max-w-3/4 rounded-lg px-4 py-2 ${
-                            msg.sender_id === userId 
-                              ? 'bg-blue-600 text-white'
-                              : 'bg-gray-100 text-gray-800'
-                          }`}
-                        >
-                          <p>{msg.message_text}</p>
-                          <p className={`text-xs mt-1 ${
-                            msg.sender_id === userId ? 'text-blue-200' : 'text-gray-500'
-                          }`}>
-                            {new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                    <div ref={messagesEndRef} />
-                  </div>
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                        </svg>
+                      </motion.button>
+                    )}
+                  </AnimatePresence>
+                </div>
+                
+                {/* Message Input */}
+                <div className="p-2 md:p-3 border-t border-gray-200 bg-white">
+                  <form onSubmit={handleSendMessage} className="flex items-center">
+                    <div className="flex-grow relative rounded-lg overflow-hidden border border-gray-300 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500">
+                      <input
+                        type="text"
+                        value={newMessage}
+                        onChange={(e) => setNewMessage(e.target.value)}
+                        className="w-full px-3 py-2 md:px-4 md:py-3 focus:outline-none text-sm"
+                        placeholder="Type your message..."
+                      />
+                    </div>
+                    <motion.button
+                      type="submit"
+                      className="ml-2 md:ml-3 flex-shrink-0 w-9 h-9 md:w-10 md:h-10 bg-blue-600 text-white rounded-full flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={!newMessage.trim()}
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                      </svg>
+                    </motion.button>
+                  </form>
+                </div>
+              </>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full text-gray-500 p-8 bg-gray-50">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-gray-300 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                </svg>
+                <h3 className="text-xl font-medium text-gray-700 mb-2">Your Messages</h3>
+                <p className="text-center mb-6">
+                  {conversations.length > 0 
+                    ? 'Select a conversation to view messages' 
+                    : 'No conversations yet. Explore properties to start chatting!'}
+                </p>
+                {conversations.length === 0 && (
+                  <Link 
+                    to="/" 
+                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors shadow-md"
+                  >
+                    Browse Apartments
+                  </Link>
                 )}
               </div>
-              
-              <form onSubmit={handleSendMessage} className="p-4 border-t border-gray-200">
-                <div className="flex">
-                  <input
-                    type="text"
-                    value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
-                    className="flex-grow px-4 py-2 border border-gray-300 rounded-l-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Type your message..."
-                  />
-                  <button
-                    type="submit"
-                    className="px-4 py-2 bg-blue-600 text-white rounded-r-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    disabled={!newMessage.trim()}
-                  >
-                    Send
-                  </button>
-                </div>
-              </form>
-            </>
-          ) : (
-            <div className="flex items-center justify-center h-full text-gray-500">
-              <p>Select a conversation to view messages</p>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
     </div>
   );
-} 
+}; 

@@ -1,7 +1,8 @@
-import { useState, useEffect, memo } from 'react';
+import { useState, useEffect, memo, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
+import { supabase } from '../../lib/supabase';
 
 const NavLink = memo(({ to, children, className = '', onClick = null }) => {
   const location = useLocation();
@@ -13,15 +14,15 @@ const NavLink = memo(({ to, children, className = '', onClick = null }) => {
       to={to} 
       className={`relative px-3 py-2 text-base transition-all duration-200 ${
         isActive 
-          ? 'text-primary-400 font-medium' 
-          : 'text-gray-100 hover:text-primary-400'
+          ? 'text-white font-medium' 
+          : 'text-gray-300 hover:text-white'
       } ${className}`}
       onClick={onClick}
     >
       {children}
       {isActive && (
         <motion.div 
-          className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary-400 rounded-full"
+          className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary-500 rounded-full"
           layoutId="activeNavIndicator"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -32,16 +33,26 @@ const NavLink = memo(({ to, children, className = '', onClick = null }) => {
   );
 });
 
-const ProfileButton = memo(({ user, userProfile, userRole, handleLogout, isOwner, isAdminUser, ownerStatus }) => {
+// Messages Button component
+const MessagesButton = memo(({ user }) => {
+  const { 
+    unreadMessages, 
+    showMessageNotification, 
+    clearMessageNotification, 
+    markAllMessagesAsRead 
+  } = useAuth();
+  const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
+  const [conversations, setConversations] = useState([]);
+  const [loading, setLoading] = useState(false);
   
-  // Owner status indicators
-  const showOwnerApprovalNotification = ownerStatus?.requestStatus === 'approved' && !ownerStatus.isOwner;
+  // If user is not available, don't render anything
+  if (!user) return null;
   
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (e) => {
-      if (isOpen && !e.target.closest('.profile-dropdown')) {
+      if (isOpen && !e.target.closest('.messages-dropdown')) {
         setIsOpen(false);
       }
     };
@@ -50,11 +61,449 @@ const ProfileButton = memo(({ user, userProfile, userRole, handleLogout, isOwner
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isOpen]);
   
+  // Get recent conversations when dropdown is opened
+  useEffect(() => {
+    if (isOpen && user) {
+      fetchRecentConversations();
+      
+      // Don't mark messages as read immediately to allow user to see which are unread
+      // They'll be marked as read when the user goes to the messages page
+      clearMessageNotification();
+    }
+  }, [isOpen, user]);
+  
+  // Fetch recent conversations
+  const fetchRecentConversations = async () => {
+    if (!user?.id) return;
+    
+    try {
+      setLoading(true);
+      
+      // First check if there are any conversations at all
+      const { count, error: countError } = await supabase
+        .from('conversations')
+        .select('*', { count: 'exact', head: true })
+        .or(`participant_one.eq.${user.id},participant_two.eq.${user.id}`);
+        
+      if (countError) throw countError;
+      
+      if (count === 0) {
+        setConversations([]);
+        setLoading(false);
+        return;
+      }
+      
+      // Fetch recent conversations with a simpler approach
+      const { data, error } = await supabase
+        .from('conversations')
+        .select(`
+          id,
+          updated_at,
+          participant_one,
+          participant_two,
+          apartment_id,
+          apartments(id, title)
+        `)
+        .or(`participant_one.eq.${user.id},participant_two.eq.${user.id}`)
+        .order('updated_at', { ascending: false })
+        .limit(5);
+      
+      if (error) throw error;
+      
+      console.log("Fetched conversations:", data);
+      
+      if (data && data.length > 0) {
+        // Get all participant IDs to fetch profiles
+        const participantIds = new Set();
+        
+        data.forEach(conv => {
+          participantIds.add(conv.participant_one);
+          participantIds.add(conv.participant_two);
+        });
+        
+        // Fetch profiles for all participants
+        const { data: profiles, error: profilesError } = await supabase
+          .from('profiles')
+          .select('id, full_name, avatar_url')
+          .in('id', Array.from(participantIds));
+        
+        if (profilesError) throw profilesError;
+        
+        // Create map of profiles
+        const profileMap = {};
+        if (profiles) {
+          profiles.forEach(profile => {
+            profileMap[profile.id] = profile;
+          });
+        }
+        
+        // Get last messages and unread counts for each conversation
+        const enrichedConversations = await Promise.all(data.map(async (conv) => {
+          // Determine other participant (not current user)
+          const otherParticipantId = conv.participant_one === user.id 
+            ? conv.participant_two 
+            : conv.participant_one;
+            
+          // Get the last message
+          const { data: lastMessageData, error: messageError } = await supabase
+            .from('messages')
+            .select('*')
+            .eq('conversation_id', conv.id)
+            .order('created_at', { ascending: false })
+            .limit(1);
+            
+          if (messageError) throw messageError;
+          
+          const lastMessage = lastMessageData && lastMessageData.length > 0 
+            ? lastMessageData[0] 
+            : null;
+            
+          // Count unread messages
+          const { count: unreadCount, error: unreadError } = await supabase
+            .from('messages')
+            .select('*', { count: 'exact', head: true })
+            .eq('conversation_id', conv.id)
+            .eq('recipient_id', user.id)
+            .eq('is_read', false);
+            
+          if (unreadError) throw unreadError;
+          
+          return {
+            ...conv,
+            otherParticipant: profileMap[otherParticipantId] || { full_name: 'Unknown User' },
+            lastMessage,
+            unreadCount: unreadCount || 0,
+            hasUnread: (unreadCount || 0) > 0
+          };
+        }));
+        
+        setConversations(enrichedConversations);
+        console.log("Enriched conversations:", enrichedConversations);
+      } else {
+        setConversations([]);
+      }
+    } catch (error) {
+      console.error('Error fetching conversations:', error);
+      setConversations([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // Navigate to messages tab with specific conversation
+  const handleNavigateToMessages = (conversationId) => {
+    try {
+      // Mark messages as read immediately
+      markAllMessagesAsRead();
+      
+      // Close dropdown immediately
+      setIsOpen(false);
+      
+      // Use a sessionStorage flag instead of state parameters to avoid navigation issues
+      if (conversationId) {
+        sessionStorage.setItem('selected_conversation_id', conversationId);
+        sessionStorage.setItem('from_notification', 'true');
+      } else {
+        sessionStorage.removeItem('selected_conversation_id');
+        sessionStorage.removeItem('from_notification');
+      }
+      
+      // Navigate without complex state to prevent React router issues
+      navigate('/profile', { 
+        state: { activeTab: 'messages' },
+        replace: true
+      });
+    } catch (error) {
+      console.error('Navigation error:', error);
+      // Simple fallback
+      navigate('/profile');
+    }
+  };
+  
+  // Handle click on messages icon
+  const handleMessagesClick = () => {
+    if (!isOpen) {
+      // When opening, clear notification
+      clearMessageNotification();
+    }
+    setIsOpen(!isOpen);
+  };
+  
+  // Format timestamp
+  const formatTime = (timestamp) => {
+    if (!timestamp) return '';
+    
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffDays = Math.floor((now - date) / (1000 * 60 * 60 * 24));
+    
+    if (diffDays === 0) {
+      // Today - show time
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } else if (diffDays === 1) {
+      // Yesterday
+      return 'Yesterday';
+    } else if (diffDays < 7) {
+      // This week - show day name
+      return date.toLocaleDateString([], { weekday: 'short' });
+    } else {
+      // Older - show date
+      return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    }
+  };
+  
+  // Improve the styling of unread conversations to make them more distinct
+  const conversationItemClass = (conv) => {
+    if (conv.hasUnread) {
+      return 'p-3 border-b border-gray-700 bg-blue-900/30 hover:bg-blue-900/50 cursor-pointer transition-colors';
+    }
+    return 'p-3 border-b border-gray-700 hover:bg-gray-700 cursor-pointer transition-colors';
+  };
+  
   return (
-    <div className="relative profile-dropdown">
+    <div className="relative messages-dropdown">
+      <button 
+        onClick={handleMessagesClick}
+        className="relative flex items-center justify-center p-2 text-gray-300 hover:text-white transition-colors"
+        aria-label="Messages"
+      >
+        <svg 
+          className="w-6 h-6" 
+          fill="none" 
+          stroke="currentColor" 
+          viewBox="0 0 24 24"
+        >
+          <path 
+            strokeLinecap="round" 
+            strokeLinejoin="round" 
+            strokeWidth={2} 
+            d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" 
+          />
+        </svg>
+        
+        {/* Notification badge */}
+        {showMessageNotification && (
+          <span className="absolute -top-1 -right-1 flex h-4 w-4">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-4 w-4 bg-red-500 text-xs text-white justify-center items-center">
+              {unreadMessages > 9 ? '9+' : unreadMessages}
+            </span>
+          </span>
+        )}
+      </button>
+      
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div 
+            className="absolute right-0 mt-2 w-80 rounded-xl bg-gray-800 shadow-lg border border-gray-700 z-50"
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.15 }}
+          >
+            <div className="p-3 border-b border-gray-700 flex justify-between items-center">
+              <h3 className="text-sm font-medium text-white">Messages</h3>
+              <Link 
+                to="/profile" 
+                state={{ activeTab: 'messages' }}
+                className="text-xs text-primary-400 hover:text-primary-300"
+                onClick={() => setIsOpen(false)}
+              >
+                See all
+              </Link>
+            </div>
+            
+            <div className="max-h-96 overflow-y-auto">
+              {loading ? (
+                <div className="p-4 text-center text-gray-400">
+                  <svg 
+                    className="animate-spin h-5 w-5 mx-auto mb-1"
+                    fill="none" 
+                    viewBox="0 0 24 24"
+                  >
+                    <circle 
+                      className="opacity-25" 
+                      cx="12" 
+                      cy="12" 
+                      r="10" 
+                      stroke="currentColor" 
+                      strokeWidth="4"
+                    ></circle>
+                    <path 
+                      className="opacity-75" 
+                      fill="currentColor" 
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    ></path>
+                  </svg>
+                  <p>Loading conversations...</p>
+                </div>
+              ) : conversations.length === 0 ? (
+                <div className="p-4 text-center text-gray-400">
+                  <p>No messages yet</p>
+                  <p className="text-xs mt-1">Your conversations will appear here</p>
+                </div>
+              ) : (
+                <div>
+                  {conversations.map(conv => (
+                    <div 
+                      key={conv.id}
+                      className={conversationItemClass(conv)}
+                      onClick={() => handleNavigateToMessages(conv.id)}
+                    >
+                      <div className="flex items-start">
+                        <div className="flex-shrink-0 mr-3 relative">
+                          {conv.otherParticipant.avatar_url ? (
+                            <img 
+                              src={conv.otherParticipant.avatar_url}
+                              alt={conv.otherParticipant.full_name}
+                              className="w-8 h-8 rounded-full"
+                            />
+                          ) : (
+                            <div className="w-8 h-8 rounded-full bg-primary-600 flex items-center justify-center text-white text-sm font-medium">
+                              {conv.otherParticipant.full_name.charAt(0)}
+                            </div>
+                          )}
+                          {conv.hasUnread && (
+                            <span className="absolute -bottom-1 -right-1 w-3 h-3 bg-red-500 rounded-full border border-gray-800"></span>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex justify-between items-baseline">
+                            <p className={`text-sm ${conv.hasUnread ? 'font-bold text-white' : 'font-medium text-white'} truncate`}>
+                              {conv.otherParticipant.full_name}
+                            </p>
+                            <span className="text-xs text-gray-500 whitespace-nowrap ml-2">
+                              {formatTime(conv.updated_at)}
+                            </span>
+                          </div>
+                          <p className="text-xs text-gray-400 truncate">
+                            {conv.apartments?.title || 'Unknown property'}
+                          </p>
+                          {conv.lastMessage && (
+                            <p className={`${conv.hasUnread ? 'text-sm font-medium text-white' : 'text-xs text-gray-300'} mt-1 truncate`}>
+                              {conv.lastMessage.sender_id === user.id ? 'You: ' : ''}
+                              {conv.lastMessage.message_text}
+                            </p>
+                          )}
+                          {conv.unreadCount > 0 && (
+                            <div className="mt-1">
+                              <span className="inline-block px-1.5 py-0.5 text-xs bg-red-500 text-white rounded-full">
+                                {conv.unreadCount} new
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            
+            <div className="p-3 border-t border-gray-700">
+              <Link
+                to="/profile"
+                state={{ activeTab: 'messages' }}
+                className="flex justify-center items-center w-full px-3 py-2 text-sm text-white bg-primary-600 hover:bg-primary-700 rounded-lg transition-colors"
+                onClick={() => {
+                  markAllMessagesAsRead();
+                  setIsOpen(false);
+                }}
+              >
+                View All Messages
+              </Link>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+});
+
+const ProfileButton = memo(({ user, userProfile, userRole, isAdminUser, isOwner, ownerStatus, logout }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const navigate = useNavigate();
+  const dropdownRef = useRef(null);
+  const { refreshUserProfile } = useAuth();
+  const [hasAttemptedRefresh, setHasAttemptedRefresh] = useState(false);
+  
+  // Show notification if owner status was just approved
+  const showOwnerApprovalNotification = ownerStatus?.requestStatus === 'approved' && !ownerStatus?.isOwner;
+  
+  const handleLogout = async () => {
+    const { success } = await logout();
+    if (success) {
+      navigate('/login');
+    }
+  };
+  
+  // Close the dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setIsOpen(false);
+      }
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isOpen]);
+  
+  // For debugging
+  useEffect(() => {
+    console.log("ProfileButton received userProfile:", userProfile);
+  }, [userProfile]);
+  
+  // Try to load profile if user is available but profile isn't
+  useEffect(() => {
+    // Single attempt flag - make it a state variable to persist between re-renders
+    if (user && !userProfile && !hasAttemptedRefresh) {
+      console.log("User available but profile is null, refreshing profile");
+      setHasAttemptedRefresh(true);
+      
+      // Add a small delay to prevent rapid refreshes
+      const timer = setTimeout(() => {
+        refreshUserProfile()
+          .then(profile => {
+            console.log("Profile refresh result:", profile ? "Profile loaded successfully" : "Profile refresh failed");
+          })
+          .catch(err => {
+            console.error("Error refreshing profile:", err);
+            // Don't attempt again to avoid infinite loops
+          });
+      }, 800); // Increased delay to prevent rapid refreshes
+      
+      return () => clearTimeout(timer);
+    }
+  }, [user, userProfile, refreshUserProfile, hasAttemptedRefresh]);
+  
+  // Debug console log to check userProfile and avatar_url
+  useEffect(() => {
+    if (isAdminUser) {
+      console.log("Admin user profile:", userProfile);
+      console.log("Admin avatar URL:", userProfile?.avatar_url);
+    }
+  }, [userProfile, isAdminUser]);
+  
+  // Fix for profile image loading
+  const refreshImageOnError = (e) => {
+    console.log("Image failed to load");
+    e.target.onerror = null;
+    
+    // Try to reload the image with a cache-busting parameter
+    if (userProfile?.avatar_url && userProfile.avatar_url.trim() !== '' && !e.target.src.includes('?v=')) {
+      e.target.src = `${userProfile.avatar_url}?v=${new Date().getTime()}`;
+    } else {
+      // Fall back to default if reload fails or URL is empty/null
+      e.target.src = '/images/default-avatar.svg';
+    }
+  };
+  
+  return (
+    <div className="relative profile-dropdown" ref={dropdownRef}>
       <button 
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center space-x-2 px-3 py-2 rounded-full border border-night-500 bg-night-700 bg-opacity-70 hover:bg-night-600 transition-colors"
+        className="flex items-center space-x-2 px-3 py-2 rounded-full border border-gray-700 bg-gray-800 hover:bg-gray-700 transition-colors"
       >
         <div className="relative">
           {userProfile && userProfile.avatar_url ? (
@@ -62,22 +511,17 @@ const ProfileButton = memo(({ user, userProfile, userRole, handleLogout, isOwner
               src={userProfile.avatar_url}
               alt={userProfile?.full_name || 'User'}
               className="w-8 h-8 rounded-full object-cover"
-              onError={(e) => {
-                console.error("Image failed to load:", e.target.src);
-                e.target.onerror = null;
-                // Fallback to initial if image fails to load
-                e.target.parentNode.innerHTML = `<div class="w-8 h-8 rounded-full bg-primary-500 bg-opacity-60 flex items-center justify-center text-white font-semibold">${user?.email?.charAt(0).toUpperCase() || 'U'}</div>`;
-              }}
+              onError={refreshImageOnError}
             />
           ) : (
-            <div className="w-8 h-8 rounded-full bg-primary-500 bg-opacity-60 flex items-center justify-center text-white font-semibold">
+            <div className="w-8 h-8 rounded-full bg-primary-500 flex items-center justify-center text-white font-semibold">
               {user?.email?.charAt(0).toUpperCase() || 'U'}
             </div>
           )}
           
           {/* Notification badge for owner approval */}
           {showOwnerApprovalNotification && (
-            <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full border border-night-800"></span>
+            <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full border border-gray-800"></span>
           )}
         </div>
         <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -88,21 +532,21 @@ const ProfileButton = memo(({ user, userProfile, userRole, handleLogout, isOwner
       <AnimatePresence>
         {isOpen && (
           <motion.div 
-            className="absolute right-0 mt-2 w-48 rounded-xl dark-glass-effect shadow-intense border border-night-500 z-50"
+            className="absolute right-0 mt-2 w-48 rounded-xl bg-gray-800 shadow-lg border border-gray-700 z-50"
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: 0.15 }}
           >
-            <div className="p-3 border-b border-night-600">
+            <div className="p-3 border-b border-gray-700">
               <p className="text-sm font-medium text-white truncate">{user?.email}</p>
-              <p className="text-xs text-night-200 capitalize">{userRole || 'User'}</p>
+              <p className="text-xs text-gray-400 capitalize">{userRole || 'User'}</p>
             </div>
             
             <div className="py-1">
               <Link 
                 to="/profile" 
-                className="flex items-center px-4 py-2 text-sm text-night-100 hover:bg-night-700 hover:text-primary-400"
+                className="flex items-center px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white"
                 onClick={() => setIsOpen(false)}
               >
                 <svg className="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -128,7 +572,7 @@ const ProfileButton = memo(({ user, userProfile, userRole, handleLogout, isOwner
               {isOwner() && (
                 <Link 
                   to="/owner/dashboard" 
-                  className="flex items-center px-4 py-2 text-sm text-night-100 hover:bg-night-700 hover:text-primary-400"
+                  className="flex items-center px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white"
                   onClick={() => setIsOpen(false)}
                 >
                   <svg className="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -141,7 +585,7 @@ const ProfileButton = memo(({ user, userProfile, userRole, handleLogout, isOwner
               {isAdminUser && (
                 <Link 
                   to="/admin/dashboard" 
-                  className="flex items-center px-4 py-2 text-sm text-night-100 hover:bg-night-700 hover:text-primary-400"
+                  className="flex items-center px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white"
                   onClick={() => setIsOpen(false)}
                 >
                   <svg className="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -149,14 +593,14 @@ const ProfileButton = memo(({ user, userProfile, userRole, handleLogout, isOwner
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                   </svg>
                   Admin
-                  <span className="ml-2 px-1.5 py-0.5 text-xs font-bold bg-red-900 text-red-100 rounded-full">
+                  <span className="ml-2 px-1.5 py-0.5 text-xs font-bold bg-red-500 text-white rounded-full">
                     Admin
                   </span>
                 </Link>
               )}
             </div>
             
-            <div className="py-1 border-t border-night-600">
+            <div className="py-1 border-t border-gray-700">
               <button 
                 onClick={() => {
                   handleLogout();
@@ -207,8 +651,8 @@ export default function Header() {
   return (
     <header className={`sticky top-0 z-50 transition-all duration-300 ${
       scrolled 
-        ? 'bg-gradient-to-b from-night-900 to-night-800 border-b border-night-600 py-2 shadow-lg' 
-        : 'bg-gradient-to-b from-night-900/80 to-night-800/70 backdrop-blur-md py-4'
+        ? 'bg-blue-900 shadow-lg py-2' 
+        : 'bg-gradient-to-b from-blue-950 to-blue-900/80 backdrop-blur-md py-3'
     }`}>
       <div className="container mx-auto px-4">
         <div className="flex justify-between items-center">
@@ -220,12 +664,12 @@ export default function Header() {
           </Link>
           
           {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center space-x-2">
+          <nav className="hidden md:flex items-center space-x-4">
             <NavLink to="/">Home</NavLink>
             <NavLink to="/contact">Contact</NavLink>
             
             {!user ? (
-              <div className="flex items-center ml-4 space-x-3">
+              <div className="flex items-center ml-6 space-x-3">
                 <Link 
                   to="/login" 
                   className="px-4 py-2 text-primary-400 hover:text-primary-300 font-medium transition-colors"
@@ -234,136 +678,114 @@ export default function Header() {
                 </Link>
                 <Link 
                   to="/signup" 
-                  className="px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg shadow-lg shadow-primary-900/20 hover:shadow-primary-800/40 transition-all"
+                  className="px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-md shadow-md transition-all"
                 >
                   Sign Up
                 </Link>
               </div>
             ) : (
-              <ProfileButton 
-                user={user}
-                userProfile={userProfile}
-                userRole={userRole}
-                handleLogout={handleLogout}
-                isOwner={isOwner}
-                isAdminUser={isAdminUser}
-                ownerStatus={ownerStatus}
-              />
+              <>
+                <div className="flex items-center space-x-4">
+                  <MessagesButton user={user} />
+                  <ProfileButton 
+                    user={user} 
+                    userProfile={userProfile} 
+                    userRole={userRole} 
+                    isOwner={isOwner}
+                    isAdminUser={isAdminUser}
+                    ownerStatus={ownerStatus}
+                    logout={logout}
+                  />
+                </div>
+              </>
             )}
           </nav>
           
           {/* Mobile Menu Button */}
-          <button 
-            className="md:hidden text-white focus:outline-none"
-            onClick={toggleMobileMenu}
-            aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
-          >
-            <svg 
-              xmlns="http://www.w3.org/2000/svg" 
-              className="h-6 w-6" 
-              fill="none" 
-              viewBox="0 0 24 24" 
-              stroke="currentColor"
+          <div className="md:hidden flex items-center">
+            <button
+              type="button"
+              className="text-gray-300 hover:text-white focus:outline-none"
+              onClick={toggleMobileMenu}
+              aria-label="Toggle menu"
             >
-              <path 
-                strokeLinecap="round" 
-                strokeLinejoin="round" 
-                strokeWidth={2} 
-                d={mobileMenuOpen ? "M6 18L18 6M6 6l12 12" : "M4 6h16M4 12h16M4 18h16"} 
-              />
-            </svg>
-          </button>
-        </div>
-        
-        {/* Mobile Menu */}
-        <AnimatePresence>
-          {mobileMenuOpen && (
-            <motion.div
-              className="md:hidden absolute top-full left-0 right-0 dark-glass-effect border-y border-night-600 z-50"
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.2 }}
-            >
-              <div className="py-3 px-4 flex flex-col space-y-3">
-                <Link 
-                  to="/" 
-                  className="text-white hover:text-primary-400 py-2"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  Home
-                </Link>
-                <Link 
-                  to="/contact" 
-                  className="text-white hover:text-primary-400 py-2"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  Contact
-                </Link>
-                
-                {user ? (
-                  <>
-                    <Link 
-                      to="/profile" 
-                      className="text-white hover:text-primary-400 py-2"
-                      onClick={() => setMobileMenuOpen(false)}
-                    >
-                      Profile
-                    </Link>
-                    
-                    {isOwner() && (
-                      <Link 
-                        to="/owner/dashboard" 
-                        className="text-white hover:text-primary-400 py-2"
-                        onClick={() => setMobileMenuOpen(false)}
-                      >
-                        My Properties
-                      </Link>
-                    )}
-                    
-                    {isAdminUser && (
-                      <Link 
-                        to="/admin/dashboard" 
-                        className="text-white hover:text-primary-400 py-2"
-                        onClick={() => setMobileMenuOpen(false)}
-                      >
-                        Admin Dashboard
-                      </Link>
-                    )}
-                    
-                    <button 
-                      onClick={() => {
-                        handleLogout();
-                        setMobileMenuOpen(false);
-                      }}
-                      className="text-red-400 hover:text-red-300 py-2 text-left"
-                    >
-                      Log Out
-                    </button>
-                  </>
-                ) : (
-                  <div className="flex flex-col space-y-2 pt-2">
-                    <Link 
-                      to="/login" 
-                      className="px-4 py-2 text-center text-primary-400 border border-primary-600 rounded-lg"
-                      onClick={() => setMobileMenuOpen(false)}
-                    >
-                      Log In
-                    </Link>
-                    <Link 
-                      to="/signup" 
-                      className="px-4 py-2 text-center bg-primary-600 text-white rounded-lg"
-                      onClick={() => setMobileMenuOpen(false)}
-                    >
-                      Sign Up
-                    </Link>
-                  </div>
-                )}
+              {mobileMenuOpen ? (
+                <svg className="h-6 w-6" stroke="currentColor" fill="none" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              ) : (
+                <svg className="h-6 w-6" stroke="currentColor" fill="none" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              )}
+            </button>
+            
+            {user && (
+              <div className="ml-3 flex items-center space-x-1">
+                <MessagesButton user={user} />
+                <ProfileButton 
+                  user={user} 
+                  userProfile={userProfile} 
+                  userRole={userRole} 
+                  isOwner={isOwner}
+                  isAdminUser={isAdminUser}
+                  ownerStatus={ownerStatus}
+                  logout={logout}
+                />
               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+            )}
+          </div>
+        </div>
       </div>
+      
+      {/* Mobile Menu */}
+      <AnimatePresence>
+        {mobileMenuOpen && (
+          <motion.div
+            className="md:hidden"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.3 }}
+          >
+            <div className="px-2 pt-2 pb-3 space-y-1 bg-blue-950 border-t border-blue-800">
+              <Link
+                to="/"
+                className="block px-3 py-2 rounded-md text-base font-medium text-white hover:bg-blue-800"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                Home
+              </Link>
+              <Link
+                to="/contact"
+                className="block px-3 py-2 rounded-md text-base font-medium text-white hover:bg-blue-800"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                Contact
+              </Link>
+              
+              {!user && (
+                <>
+                  <Link
+                    to="/login"
+                    className="block px-3 py-2 rounded-md text-base font-medium text-white hover:bg-blue-800"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    Log In
+                  </Link>
+                  <Link
+                    to="/signup"
+                    className="block px-3 py-2 rounded-md text-base font-medium text-white bg-primary-500 hover:bg-primary-600"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    Sign Up
+                  </Link>
+                </>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </header>
   );
 } 

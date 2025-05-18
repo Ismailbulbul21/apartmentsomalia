@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { NavLink, Routes, Route, Navigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { useAuth } from '../../context/AuthContext';
+import { supabase } from '../../lib/supabase';
 
 // Import admin components
 import PendingApprovals from './PendingApprovals';
@@ -18,6 +20,14 @@ const tabs = [
 
 const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState('pending');
+  const { user, refreshUserProfile } = useAuth();
+  
+  // Ensure user profile is loaded in admin dashboard
+  useEffect(() => {
+    if (user) {
+      refreshUserProfile();
+    }
+  }, [user]);
 
   return (
     <motion.div 

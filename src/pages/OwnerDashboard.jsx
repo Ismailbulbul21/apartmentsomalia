@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Routes, Route, Link, useNavigate, useLocation, useParams } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { supabase, uploadApartmentImage } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
@@ -149,36 +149,53 @@ const MyListings = () => {
   }
 
   return (
-    <div>
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.3 }}
+    >
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-xl font-semibold">My Apartment Listings</h2>
-        <button 
+        <motion.button 
           onClick={handleCreateNew}
           className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
         >
           Create New Listing
-        </button>
+        </motion.button>
       </div>
       
       {apartments.length === 0 ? (
-        <div className="bg-yellow-50 p-6 rounded-lg text-center">
+        <motion.div 
+          className="bg-yellow-50 p-6 rounded-lg text-center"
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.4 }}
+        >
           <p className="text-gray-700 mb-4">You haven't created any apartment listings yet.</p>
-          <button 
+          <motion.button 
             onClick={handleCreateNew}
             className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
           >
             Create Your First Listing
-          </button>
-        </div>
+          </motion.button>
+        </motion.div>
       ) : (
         <div className="space-y-6">
-          {apartments.map((apartment) => (
-            <div 
+          {apartments.map((apartment, index) => (
+            <motion.div 
               key={apartment.id} 
-              className="bg-white rounded-lg shadow-md overflow-hidden border border-gray-200"
+              className="bg-white rounded-lg shadow-md overflow-hidden border border-gray-200 hover:shadow-lg transition-shadow"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, delay: index * 0.1 }}
+              whileHover={{ y: -5 }}
             >
               <div className="md:flex">
-                <div className="md:flex-shrink-0 w-full md:w-48 h-48">
+                <div className="md:flex-shrink-0 w-full md:w-48 h-48 overflow-hidden">
                   {apartment.apartment_images && apartment.apartment_images.length > 0 ? (
                     <img
                       src={(() => {
@@ -201,7 +218,7 @@ const MyListings = () => {
                         }
                       })()}
                       alt={apartment.title}
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-cover transition-transform duration-300 hover:scale-110"
                       onError={(e) => {
                         console.error("Image failed to load:", e.target.src);
                         e.target.src = '/placeholder-apartment.jpg';
@@ -257,430 +274,35 @@ const MyListings = () => {
                       <span className="font-medium">Created:</span> {new Date(apartment.created_at).toLocaleDateString()}
                     </div>
                     <div className="flex space-x-2">
-                      <button
+                      <motion.button
                         onClick={() => handleEdit(apartment.id)}
                         className="px-3 py-1 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors text-sm"
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
                       >
                         Edit
-                      </button>
-                      <button
+                      </motion.button>
+                      <motion.button
                         onClick={() => handleToggleAvailability(apartment)}
                         className={`px-3 py-1 rounded-md transition-colors text-sm ${
                           apartment.is_available
                             ? 'bg-red-100 text-red-700 hover:bg-red-200'
                             : 'bg-green-100 text-green-700 hover:bg-green-200'
                         }`}
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
                       >
                         {apartment.is_available ? 'Mark as Unavailable' : 'Mark as Available'}
-                      </button>
+                      </motion.button>
                     </div>
                   </div>
                 </div>
               </div>
-            </div>
+            </motion.div>
           ))}
         </div>
       )}
-    </div>
-  );
-};
-
-const Messages = () => {
-  const { user } = useAuth();
-  const [conversations, setConversations] = useState([]);
-  const [selectedConversation, setSelectedConversation] = useState(null);
-  const [messages, setMessages] = useState([]);
-  const [newMessage, setNewMessage] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const messagesEndRef = useRef(null);
-  
-  // Scroll to bottom of messages
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-
-  const fetchConversations = async () => {
-    try {
-      setLoading(true);
-      
-      // First, fetch the conversations with apartment data
-      const { data: conversationsData, error: conversationsError } = await supabase
-        .from('conversations')
-        .select(`
-          *,
-          apartments(id, title)
-        `)
-        .or(`participant_one.eq.${user.id},participant_two.eq.${user.id}`)
-        .order('updated_at', { ascending: false });
-      
-      if (conversationsError) throw conversationsError;
-      
-      if (conversationsData && conversationsData.length > 0) {
-        // Extract all unique participant IDs
-        const participantIds = new Set();
-        conversationsData.forEach(conv => {
-          participantIds.add(conv.participant_one);
-          participantIds.add(conv.participant_two);
-        });
-        
-        // Fetch profiles for all participants
-        const { data: profilesData, error: profilesError } = await supabase
-          .from('profiles')
-          .select('id, full_name, avatar_url')
-          .in('id', Array.from(participantIds));
-          
-        if (profilesError) throw profilesError;
-        
-        // Create a map of profiles by ID for easy lookup
-        const profilesMap = (profilesData || []).reduce((map, profile) => {
-          map[profile.id] = profile;
-          return map;
-        }, {});
-        
-        // Add profile data to conversations
-        const enrichedConversations = conversationsData.map(conv => ({
-          ...conv,
-          profiles: {
-            participant_one_fkey: profilesMap[conv.participant_one] || null,
-            participant_two_fkey: profilesMap[conv.participant_two] || null
-          }
-        }));
-        
-        setConversations(enrichedConversations);
-      } else {
-        setConversations([]);
-      }
-    } catch (error) {
-      console.error('Error fetching conversations:', error);
-      setError(error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Fetch conversations initially and set up refresh
-  useEffect(() => {
-    fetchConversations();
-    
-    // Set up realtime subscription for conversations
-    const conversationsSubscription = supabase
-      .channel('public:conversations')
-      .on('postgres_changes', 
-        { 
-          event: '*', 
-          schema: 'public', 
-          table: 'conversations',
-          filter: `participant_one=eq.${user.id}` 
-        },
-        () => {
-          fetchConversations();
-        }
-      )
-      .on('postgres_changes', 
-        { 
-          event: '*', 
-          schema: 'public', 
-          table: 'conversations',
-          filter: `participant_two=eq.${user.id}` 
-        },
-        () => {
-          fetchConversations();
-        }
-      )
-      .subscribe();
-    
-    return () => {
-      supabase.removeChannel(conversationsSubscription);
-    };
-  }, [user.id]);
-
-  const fetchMessages = async (conversationId) => {
-    try {
-      // First fetch the messages
-      const { data: messagesData, error: messagesError } = await supabase
-        .from('messages')
-        .select('*')
-        .eq('conversation_id', conversationId)
-        .order('created_at', { ascending: true });
-      
-      if (messagesError) throw messagesError;
-      
-      if (messagesData && messagesData.length > 0) {
-        // Fetch profiles for message senders
-        const senderIds = [...new Set(messagesData.map(msg => msg.sender_id))];
-        
-        const { data: profilesData, error: profilesError } = await supabase
-          .from('profiles')
-          .select('id, full_name')
-          .in('id', senderIds);
-        
-        if (profilesError) throw profilesError;
-        
-        // Create a map of profiles by ID
-        const profilesMap = (profilesData || []).reduce((map, profile) => {
-          map[profile.id] = profile;
-          return map;
-        }, {});
-        
-        // Add profiles to messages
-        const enrichedMessages = messagesData.map(msg => ({
-          ...msg,
-          profiles: profilesMap[msg.sender_id] || null
-        }));
-        
-        setMessages(enrichedMessages);
-      } else {
-        setMessages([]);
-      }
-    } catch (error) {
-      console.error('Error fetching messages:', error);
-      setMessages([]);
-    }
-  };
-
-  useEffect(() => {
-    if (!selectedConversation) return;
-    
-    fetchMessages(selectedConversation.id);
-    
-    // Set up realtime subscription for new messages
-    const messagesSubscription = supabase
-      .channel('public:messages')
-      .on('postgres_changes', 
-        { 
-          event: 'INSERT', 
-          schema: 'public', 
-          table: 'messages',
-          filter: `conversation_id=eq.${selectedConversation.id}` 
-        },
-        (payload) => {
-          // Fetch the full message with profile data
-          fetchMessages(selectedConversation.id);
-        }
-      )
-      .subscribe();
-
-    // Also update read status for messages in this conversation
-    const updateReadStatus = async () => {
-      try {
-        await supabase
-          .from('messages')
-          .update({ is_read: true })
-          .eq('conversation_id', selectedConversation.id)
-          .eq('recipient_id', user.id);
-      } catch (error) {
-        console.error('Error updating read status:', error);
-      }
-    };
-    
-    updateReadStatus();
-    
-    return () => {
-      supabase.removeChannel(messagesSubscription);
-    };
-  }, [selectedConversation, user.id]);
-
-  const handleSendMessage = async (e) => {
-    e.preventDefault();
-    
-    if (!newMessage.trim() || !selectedConversation) return;
-    
-    try {
-      const otherParticipantId = 
-        selectedConversation.participant_one === user.id 
-          ? selectedConversation.participant_two
-          : selectedConversation.participant_one;
-      
-      // Optimistically update the UI
-      const tempMessage = {
-        id: `temp-${Date.now()}`,
-        conversation_id: selectedConversation.id,
-        sender_id: user.id,
-        recipient_id: otherParticipantId,
-        message_text: newMessage,
-        apartment_id: selectedConversation.apartment_id,
-        created_at: new Date().toISOString(),
-        is_read: false,
-        profiles: { 
-          // Use stored user profile data
-          full_name: 'You'
-        }
-      };
-      
-      // Update UI immediately
-      setMessages(current => [...current, tempMessage]);
-      
-      // Clear input field right away
-      setNewMessage('');
-      
-      // Send to database
-      const { error } = await supabase
-        .from('messages')
-        .insert({
-          conversation_id: selectedConversation.id,
-          sender_id: user.id,
-          recipient_id: otherParticipantId,
-          message_text: newMessage,
-          apartment_id: selectedConversation.apartment_id
-        });
-      
-      if (error) throw error;
-      
-      // Also update conversation's updated_at field
-      await supabase
-        .from('conversations')
-        .update({ updated_at: new Date().toISOString() })
-        .eq('id', selectedConversation.id);
-      
-      // Update conversations list to reflect the new message
-      fetchConversations();
-    } catch (error) {
-      console.error('Error sending message:', error);
-      alert('Failed to send message. Please try again.');
-    }
-  };
-
-  if (loading) {
-    return <LoadingSpinner />;
-  }
-
-  if (error) {
-    return (
-      <div className="bg-red-100 text-red-700 p-4 rounded-md">
-        <p>Error: {error}</p>
-      </div>
-    );
-  }
-
-  // Helper function to display the other participant's name
-  const getOtherParticipantName = (conversation) => {
-    if (!conversation.profiles) return 'Unknown';
-    
-    if (conversation.participant_one === user.id) {
-      return conversation.profiles.participant_two_fkey?.full_name || 'Unknown';
-    } else {
-      return conversation.profiles.participant_one_fkey?.full_name || 'Unknown';
-    }
-  };
-
-  return (
-    <div className="flex h-[600px] rounded-lg overflow-hidden border border-gray-200">
-      {/* Conversations List */}
-      <div className="w-1/3 bg-gray-50 border-r border-gray-200 overflow-y-auto">
-        <div className="p-4 border-b border-gray-200">
-          <h2 className="font-semibold text-gray-800">Messages</h2>
-        </div>
-        
-        {conversations.length === 0 ? (
-          <div className="p-4 text-center text-gray-500">
-            <p>No conversations yet.</p>
-          </div>
-        ) : (
-          <div>
-            {conversations.map((conversation) => (
-              <div 
-                key={conversation.id}
-                className={`p-3 cursor-pointer border-b border-gray-100 hover:bg-gray-100 transition-colors ${
-                  selectedConversation?.id === conversation.id ? 'bg-blue-50' : ''
-                }`}
-                onClick={() => setSelectedConversation(conversation)}
-              >
-                <div className="flex justify-between items-center">
-                  <h3 className="font-medium text-gray-800">
-                    {getOtherParticipantName(conversation)}
-                  </h3>
-                  <span className="text-xs text-gray-500">
-                    {new Date(conversation.updated_at).toLocaleDateString()}
-                  </span>
-                </div>
-                <p className="text-sm text-gray-600 truncate mt-1">
-                  Regarding: {conversation.apartments?.title || 'Unknown property'}
-                </p>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-      
-      {/* Message Area */}
-      <div className="w-2/3 flex flex-col bg-white">
-        {selectedConversation ? (
-          <>
-            <div className="p-4 border-b border-gray-200 flex justify-between items-center">
-              <div>
-                <h2 className="font-semibold text-gray-800">
-                  {getOtherParticipantName(selectedConversation)}
-                </h2>
-                <p className="text-sm text-gray-600">
-                  {selectedConversation.apartments?.title || 'Unknown property'}
-                </p>
-              </div>
-            </div>
-            
-            <div className="flex-grow p-4 overflow-y-auto">
-              {messages.length === 0 ? (
-                <div className="text-center text-gray-500 my-8">
-                  <p>No messages yet. Start the conversation!</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {messages.map((msg) => (
-                    <div 
-                      key={msg.id}
-                      className={`flex ${msg.sender_id === user.id ? 'justify-end' : 'justify-start'}`}
-                    >
-                      <div 
-                        className={`max-w-3/4 rounded-lg px-4 py-2 ${
-                          msg.sender_id === user.id 
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-gray-100 text-gray-800'
-                        }`}
-                      >
-                        <p>{msg.message_text}</p>
-                        <p className={`text-xs mt-1 ${
-                          msg.sender_id === user.id ? 'text-blue-200' : 'text-gray-500'
-                        }`}>
-                          {new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                  <div ref={messagesEndRef} />
-                </div>
-              )}
-            </div>
-            
-            <form onSubmit={handleSendMessage} className="p-4 border-t border-gray-200">
-              <div className="flex">
-                <input
-                  type="text"
-                  value={newMessage}
-                  onChange={(e) => setNewMessage(e.target.value)}
-                  className="flex-grow px-4 py-2 border border-gray-300 rounded-l-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Type your message..."
-                />
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-blue-600 text-white rounded-r-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  disabled={!newMessage.trim()}
-                >
-                  Send
-                </button>
-              </div>
-            </form>
-          </>
-        ) : (
-          <div className="flex items-center justify-center h-full text-gray-500">
-            <p>Select a conversation to view messages</p>
-          </div>
-        )}
-      </div>
-    </div>
+    </motion.div>
   );
 };
 
@@ -689,8 +311,9 @@ const Reviews = () => {
   const [reviews, setReviews] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [replyText, setReplyText] = useState({});
-  const [replying, setReplying] = useState({});
+  const [replyingTo, setReplyingTo] = useState(null);
+  const [replyText, setReplyText] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     const fetchReviews = async () => {
@@ -754,16 +377,16 @@ const Reviews = () => {
   }, [user.id]);
 
   const handleReply = async (reviewId) => {
-    if (!replyText[reviewId]?.trim()) return;
+    if (!replyText.trim()) return;
     
     try {
-      setReplying({...replying, [reviewId]: true});
+      setSubmitting(true);
       
       const { error } = await supabase
         .from('review_replies')
         .insert({
           review_id: reviewId,
-          reply_text: replyText[reviewId],
+          reply_text: replyText,
           owner_id: user.id
         });
       
@@ -778,7 +401,7 @@ const Reviews = () => {
                 ...review.review_replies || [],
                 { 
                   id: Date.now(), // Temporary ID until we refresh
-                  reply_text: replyText[reviewId],
+                  reply_text: replyText,
                   created_at: new Date().toISOString()
                 }
               ]
@@ -787,12 +410,12 @@ const Reviews = () => {
       ));
       
       // Clear the reply text
-      setReplyText({...replyText, [reviewId]: ''});
+      setReplyText('');
     } catch (error) {
       console.error('Error replying to review:', error);
       alert('Failed to reply to review. Please try again.');
     } finally {
-      setReplying({...replying, [reviewId]: false});
+      setSubmitting(false);
     }
   };
 
@@ -809,17 +432,38 @@ const Reviews = () => {
   }
 
   return (
-    <div>
-      <h2 className="text-xl font-semibold mb-6">Reviews for My Properties</h2>
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.3 }}
+    >
+      <h2 className="text-xl font-semibold mb-6">Reviews for Your Properties</h2>
       
-      {reviews.length === 0 ? (
-        <div className="bg-gray-50 p-6 rounded-lg text-center">
-          <p className="text-gray-700">No reviews for your properties yet.</p>
+      {loading ? (
+        <LoadingSpinner />
+      ) : error ? (
+        <div className="bg-red-100 text-red-700 p-4 rounded-md">
+          <p>Error: {error}</p>
         </div>
+      ) : reviews.length === 0 ? (
+        <motion.div 
+          className="bg-gray-50 p-6 rounded-lg text-center"
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.4 }}
+        >
+          <p className="text-gray-600">You don't have any reviews for your properties yet.</p>
+        </motion.div>
       ) : (
         <div className="space-y-6">
-          {reviews.map((review) => (
-            <div key={review.id} className="bg-white rounded-lg shadow-md overflow-hidden border border-gray-200 p-6">
+          {reviews.map((review, index) => (
+            <motion.div 
+              key={review.id} 
+              className="bg-white p-5 rounded-lg shadow-sm border border-gray-200"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, delay: index * 0.1 }}
+            >
               <div className="mb-4">
                 <div className="flex justify-between">
                   <h3 className="font-semibold">{review.apartments?.title || 'Unknown Property'}</h3>
@@ -860,27 +504,29 @@ const Reviews = () => {
                 <div className="mt-4">
                   <div className="mb-2">
                     <textarea
-                      value={replyText[review.id] || ''}
-                      onChange={(e) => setReplyText({...replyText, [review.id]: e.target.value})}
+                      value={replyText}
+                      onChange={(e) => setReplyText(e.target.value)}
                       className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                       rows={3}
                       placeholder="Write a reply to this review..."
                     ></textarea>
                   </div>
-                  <button
+                  <motion.button
                     onClick={() => handleReply(review.id)}
-                    disabled={replying[review.id] || !replyText[review.id]?.trim()}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:bg-blue-300"
+                    disabled={submitting || !replyText.trim()}
+                    className={`px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:bg-blue-300`}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
                   >
-                    {replying[review.id] ? 'Sending...' : 'Reply to Review'}
-                  </button>
+                    {submitting ? 'Sending...' : 'Reply to Review'}
+                  </motion.button>
                 </div>
               ) : null}
-            </div>
+            </motion.div>
           ))}
         </div>
       )}
-    </div>
+    </motion.div>
   );
 };
 
@@ -1908,79 +1554,98 @@ const EditListing = () => {
 };
 
 export default function OwnerDashboard() {
-  const location = useLocation();
+  const [activeTab, setActiveTab] = useState('my-listings');
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const location = useLocation();
   
-  // Extract the active tab from URL or default to 'listings'
-  const pathname = location.pathname;
-  const currentTab = pathname.includes('messages') 
-    ? 'messages' 
-    : pathname.includes('reviews') 
-      ? 'reviews' 
-      : pathname.includes('new-listing') || pathname.includes('edit-listing') 
-        ? '' // No tab active for forms
-        : 'listings';
+  // Set tab based on URL
+  useEffect(() => {
+    const path = location.pathname;
+    if (path.includes('/new-listing')) {
+      setActiveTab('new-listing');
+    } else if (path.includes('/edit-listing')) {
+      setActiveTab('my-listings');
+    } else if (path.includes('/reviews')) {
+      setActiveTab('reviews');
+    }
+  }, [location]);
 
-  // Navigation helper
   const handleTabClick = (tab) => {
-    navigate(`/owner/dashboard${tab === 'listings' ? '' : `/${tab}`}`);
+    setActiveTab(tab);
+    
+    // Update URL based on tab
+    switch (tab) {
+      case 'my-listings':
+        navigate('/owner/dashboard');
+        break;
+      case 'reviews':
+        navigate('/owner/dashboard/reviews');
+        break;
+      case 'new-listing':
+        navigate('/owner/dashboard/new-listing');
+        break;
+      default:
+        navigate('/owner/dashboard');
+    }
   };
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="bg-white rounded-xl shadow-md overflow-hidden">
-        <div className="p-6 bg-gray-50 border-b border-gray-200">
-          <h1 className="text-2xl font-bold text-gray-800">Owner Dashboard</h1>
-          <p className="text-gray-600">Manage your apartment listings, messages, and reviews</p>
-        </div>
-        
-        {/* Tab Navigation - Hide for forms */}
-        {!pathname.includes('new-listing') && !pathname.includes('edit-listing') && (
-          <div className="px-6 py-2 bg-white border-b border-gray-200">
-            <div className="flex space-x-4">
+    <div 
+      className="min-h-screen py-8 px-4 sm:px-6 lg:px-8 relative"
+      style={{
+        background: `linear-gradient(rgba(5, 10, 15, 0.8), rgba(5, 10, 15, 0.92)), 
+                     url('/dark-apartment-bg1.jpg')`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundAttachment: 'fixed',
+        backgroundRepeat: 'no-repeat',
+        boxShadow: 'inset 0 0 100px rgba(0, 0, 0, 0.7)'
+      }}
+    >
+      <div className="max-w-7xl mx-auto">
+        <div className="bg-white/90 backdrop-blur-md shadow-2xl rounded-xl overflow-hidden border border-gray-800/10">
+          <div className="border-b border-gray-200">
+            <nav className="-mb-px flex" aria-label="Tabs">
               <button
-                className={`px-4 py-2 font-medium rounded-md transition-colors ${
-                  currentTab === 'listings' 
-                    ? 'text-blue-600 bg-blue-50' 
-                    : 'text-gray-600 hover:text-blue-600 hover:bg-gray-50'
+                onClick={() => handleTabClick('my-listings')}
+                className={`w-1/3 py-4 px-1 text-center border-b-2 font-medium text-sm ${
+                  activeTab === 'my-listings'
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
-                onClick={() => handleTabClick('listings')}
               >
                 My Listings
               </button>
               <button
-                className={`px-4 py-2 font-medium rounded-md transition-colors ${
-                  currentTab === 'messages' 
-                    ? 'text-blue-600 bg-blue-50' 
-                    : 'text-gray-600 hover:text-blue-600 hover:bg-gray-50'
-                }`}
-                onClick={() => handleTabClick('messages')}
-              >
-                Messages
-              </button>
-              <button
-                className={`px-4 py-2 font-medium rounded-md transition-colors ${
-                  currentTab === 'reviews' 
-                    ? 'text-blue-600 bg-blue-50' 
-                    : 'text-gray-600 hover:text-blue-600 hover:bg-gray-50'
-                }`}
                 onClick={() => handleTabClick('reviews')}
+                className={`w-1/3 py-4 px-1 text-center border-b-2 font-medium text-sm ${
+                  activeTab === 'reviews'
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
               >
                 Reviews
               </button>
-            </div>
+              <button
+                onClick={() => handleTabClick('new-listing')}
+                className={`w-1/3 py-4 px-1 text-center border-b-2 font-medium text-sm ${
+                  activeTab === 'new-listing'
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                Create Listing
+              </button>
+            </nav>
           </div>
-        )}
-        
-        <div className="p-6">
-          <Routes>
-            <Route index element={<MyListings />} />
-            <Route path="messages" element={<Messages />} />
-            <Route path="reviews" element={<Reviews />} />
-            <Route path="new-listing" element={<NewListing />} />
-            <Route path="edit-listing/:id" element={<EditListing />} />
-          </Routes>
+          <div className="p-6">
+            <Routes>
+              <Route index element={<MyListings />} />
+              <Route path="reviews" element={<Reviews />} />
+              <Route path="new-listing" element={<NewListing />} />
+              <Route path="edit-listing/:id" element={<EditListing />} />
+            </Routes>
+          </div>
         </div>
       </div>
     </div>
