@@ -563,6 +563,24 @@ export function AuthProvider({ children }) {
     }
   }, [user]);
 
+  // Function to sign in with Google
+  const signInWithGoogle = async () => {
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin
+        }
+      });
+      
+      if (error) throw error;
+      return { success: true, data };
+    } catch (error) {
+      console.error('Google sign in error:', error);
+      return { success: false, error: error.message };
+    }
+  };
+
   const value = {
     user,
     userRole,
@@ -571,17 +589,14 @@ export function AuthProvider({ children }) {
     login,
     signup,
     logout,
+    signInWithGoogle,
     becomeOwner,
+    ownerStatus,
     isAdmin,
     isOwner,
-    ownerStatus,
     refreshOwnerStatus,
-    // Special admin flag that can be checked directly
-    isAdminUser: user?.id === ADMIN_USER_ID || userRole === 'admin',
-    // Message notification features
     unreadMessages,
     showMessageNotification,
-    checkUnreadMessages,
     markAllMessagesAsRead,
     clearMessageNotification,
     refreshUserProfile: async () => {
