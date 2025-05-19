@@ -458,12 +458,8 @@ export default function ApartmentDetail() {
                     <span className="text-sm text-night-400">Musqulo</span>
                   </div>
                   <div className="bg-night-900 rounded-lg p-3 text-center">
-                    <span className="block text-primary-400 text-lg font-semibold">{apartment.square_meters} m²</span>
-                    <span className="text-sm text-night-400">Baaxad</span>
-                  </div>
-                  <div className="bg-night-900 rounded-lg p-3 text-center">
                     <span className="block text-primary-400 text-lg font-semibold">{apartment.is_furnished ? 'Haa' : 'Maya'}</span>
-                    <span className="text-sm text-night-400">Fadhiga leh</span>
+                    <span className="text-sm text-night-400">Waa Qalabaysan yahay</span>
                   </div>
                 </div>
                 
@@ -614,7 +610,7 @@ export default function ApartmentDetail() {
                     <svg className="w-5 h-5 mr-2 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                     </svg>
-                    <span className="text-night-200">Fadhiga leh</span>
+                    <span className="text-night-200">Waa Qalabaysan yahay</span>
                   </div>
                 )}
               </div>
