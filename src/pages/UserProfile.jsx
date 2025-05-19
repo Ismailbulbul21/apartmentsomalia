@@ -1103,10 +1103,25 @@ const MessagesTab = ({ userId }) => {
     setShowConversations(true);
   };
 
-  // Scroll to bottom of messages
+  // Scroll to bottom of messages with enhanced smooth effect
   const scrollToBottom = () => {
     if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+      const container = messageContainerRef.current;
+      const scrollElement = messagesEndRef.current;
+      
+      if (container) {
+        // Enhanced smooth scrolling with animation
+        container.scrollTo({
+          top: scrollElement.offsetTop,
+          behavior: 'smooth'
+        });
+      } else {
+        // Fallback to default
+        scrollElement.scrollIntoView({ 
+          behavior: "smooth",
+          block: "end"
+        });
+      }
     }
   }
 
@@ -1619,7 +1634,7 @@ const MessagesTab = ({ userId }) => {
               <h3 className="font-medium text-lg text-gray-800">Conversations</h3>
             </div>
             
-            <div className="overflow-y-auto flex-grow">
+            <div className="overflow-y-auto flex-grow scrollbar-custom" style={{ height: 'calc(100% - 60px)', scrollBehavior: 'smooth', WebkitOverflowScrolling: 'touch' }}>
               {loading && (
                 <div className="p-8 flex justify-center">
                   <LoadingSpinner />
@@ -1773,8 +1788,9 @@ const MessagesTab = ({ userId }) => {
                 
                 {/* Messages */}
                 <div 
-                  className="flex-grow p-3 md:p-4 overflow-y-auto bg-gradient-to-b from-gray-50 to-white"
+                  className="flex-grow p-3 md:p-4 overflow-y-auto bg-gradient-to-b from-gray-50 to-white h-[60vh] md:h-[70vh] scrollbar-custom"
                   ref={messageContainerRef}
+                  style={{ scrollBehavior: 'smooth', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}
                 >
                   {messages.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-full text-gray-500">
@@ -1808,11 +1824,12 @@ const MessagesTab = ({ userId }) => {
                               </div>
                             )}
                             
-                            <motion.div 
+                                                          <motion.div 
                               className={`flex ${msg.sender_id === userId ? 'justify-end' : 'justify-start'}`}
                               initial={{ opacity: 0, y: 10 }}
                               animate={{ opacity: 1, y: 0 }}
-                              transition={{ duration: 0.2 }}
+                              transition={{ duration: 0.2, ease: "easeOut" }}
+                              layout
                             >
                               {/* Show avatar for recipient's messages */}
                               {msg.sender_id !== userId && (

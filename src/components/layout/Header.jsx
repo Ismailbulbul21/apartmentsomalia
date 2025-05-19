@@ -291,11 +291,11 @@ const MessagesButton = memo(({ user }) => {
           />
         </svg>
         
-        {/* Notification badge - enhanced for better mobile visibility */}
+        {/* Notification badge - mobile optimized and centered */}
         {showMessageNotification && (
-          <span className="absolute -top-1 -right-1 flex h-5 w-5">
+          <span className="absolute top-0 md:-top-1 right-0 md:-right-1 flex h-5 w-5 transform translate-x-1/2 -translate-y-1/3 md:translate-x-0 md:-translate-y-0">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-5 w-5 bg-red-500 text-xs text-white justify-center items-center font-bold">
+            <span className="relative inline-flex rounded-full h-5 w-5 bg-red-500 text-xs text-white justify-center items-center font-bold shadow-lg">
               {unreadMessages > 9 ? '9+' : unreadMessages}
             </span>
           </span>
@@ -306,12 +306,12 @@ const MessagesButton = memo(({ user }) => {
         {isOpen && (
           <motion.div 
             ref={dropdownRef}
-            className="fixed md:absolute left-2 md:left-auto right-2 md:right-0 mt-2 w-[calc(100vw-16px)] md:w-80 max-w-sm rounded-xl bg-gray-800 shadow-lg border border-gray-700 z-50"
+            className="fixed md:absolute left-2 md:left-auto right-2 md:right-0 mt-2 w-[calc(100vw-16px)] md:w-80 max-w-sm rounded-xl bg-gray-800 shadow-lg border border-gray-700 z-50 scrollbar-custom transform-gpu"
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: 0.15 }}
-            style={{ maxHeight: '80vh', overflowY: 'auto', top: "50px" }}
+            style={{ maxHeight: '80vh', top: "50px" }}
           >
             <div className="p-3 border-b border-gray-700 flex justify-between items-center sticky top-0 bg-gray-800 z-10">
               <h3 className="text-sm font-medium text-white">Messages</h3>
@@ -325,7 +325,7 @@ const MessagesButton = memo(({ user }) => {
               </Link>
             </div>
             
-            <div className="max-h-[calc(80vh-100px)] overflow-y-auto">
+            <div className="max-h-[calc(80vh-100px)] overflow-y-auto scrollbar-custom" style={{ scrollBehavior: 'smooth', WebkitOverflowScrolling: 'touch' }}>
               {loading ? (
                 <div className="flex justify-center items-center py-8">
                   <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white"></div>
