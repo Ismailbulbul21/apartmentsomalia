@@ -34,32 +34,55 @@ const AdminDashboard = () => {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.3 }}
-      className="container mx-auto px-4 py-8"
+      className="container mx-auto px-4 py-4 md:py-8"
     >
-      <h1 className="text-3xl font-bold mb-6">Admin Dashboard</h1>
+      <h1 className="text-2xl md:text-3xl font-bold mb-4 md:mb-6">Admin Dashboard</h1>
       
-      {/* Navigation tabs */}
-      <div className="flex mb-6 bg-white rounded-lg shadow p-1">
-        {tabs.map((tab) => (
-          <NavLink
-            key={tab.path}
-            to={`/admin/dashboard/${tab.path}`}
-            className={({ isActive }) => 
-              `flex-1 px-4 py-3 text-center rounded-md transition-all
-              ${isActive 
-                ? 'bg-primary-600 text-white font-medium' 
-                : 'text-gray-700 hover:bg-gray-100'}`
-            }
-            onClick={() => setActiveTab(tab.path)}
-          >
-            <span className="mr-2">{tab.icon}</span>
-            {tab.name}
-          </NavLink>
-        ))}
+      {/* Navigation tabs - vertical on mobile, horizontal on larger screens */}
+      <div className="md:flex mb-4 md:mb-6 bg-white rounded-lg shadow overflow-hidden">
+        {/* Mobile tabs - scrollable horizontal */}
+        <div className="flex md:hidden overflow-x-auto p-1 scrollbar-hide">
+          {tabs.map((tab) => (
+            <NavLink
+              key={tab.path}
+              to={`/admin/dashboard/${tab.path}`}
+              className={({ isActive }) => 
+                `flex-shrink-0 mr-2 px-4 py-3 text-center rounded-md transition-all whitespace-nowrap
+                ${isActive 
+                  ? 'bg-primary-600 text-white font-medium' 
+                  : 'text-gray-700 hover:bg-gray-100'}`
+              }
+              onClick={() => setActiveTab(tab.path)}
+            >
+              <span className="mr-2">{tab.icon}</span>
+              {tab.name}
+            </NavLink>
+          ))}
+        </div>
+        
+        {/* Desktop tabs */}
+        <div className="hidden md:flex w-full p-1">
+          {tabs.map((tab) => (
+            <NavLink
+              key={tab.path}
+              to={`/admin/dashboard/${tab.path}`}
+              className={({ isActive }) => 
+                `flex-1 px-4 py-3 text-center rounded-md transition-all
+                ${isActive 
+                  ? 'bg-primary-600 text-white font-medium' 
+                  : 'text-gray-700 hover:bg-gray-100'}`
+              }
+              onClick={() => setActiveTab(tab.path)}
+            >
+              <span className="mr-2">{tab.icon}</span>
+              {tab.name}
+            </NavLink>
+          ))}
+        </div>
       </div>
       
       {/* Content */}
-      <div className="bg-gray-50 rounded-lg p-6">
+      <div className="bg-gray-50 rounded-lg p-3 md:p-6">
         <Routes>
           <Route path="pending" element={<PendingApprovals />} />
           <Route path="owners" element={<PendingOwners />} />

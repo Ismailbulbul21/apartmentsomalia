@@ -122,24 +122,51 @@ export default function UserProfile() {
       if (usersError) throw usersError;
       setAdminUsers(usersData || []);
       
-      // Fetch pending owner requests
+      // Fetch pending owner requests with profile data using proper join syntax
       const { data: ownersData, error: ownersError } = await supabase
         .from('owner_requests')
-        .select('*, profiles(full_name, email, avatar_url)')
+        .select(`
+          id,
+          user_id,
+          business_name,
+          business_phone,
+          business_address,
+          business_description,
+          status,
+          rejection_reason,
+          created_at,
+          updated_at,
+          profiles:user_id (id, full_name, avatar_url)
+        `)
         .eq('status', 'pending')
         .order('created_at', { ascending: false });
       
       if (ownersError) throw ownersError;
       setPendingOwners(ownersData || []);
       
-      // Fetch apartments
-      const { data: apartmentsData, error: apartmentsError } = await supabase
-        .from('apartments')
-        .select('*, profiles(full_name)')
-        .order('created_at', { ascending: false });
-      
-      if (apartmentsError) throw apartmentsError;
-      setApartments(apartmentsData || []);
+      // Fetch apartments using the new RPC function
+      try {
+        const { data: apartmentsData, error: rpcError } = await supabase
+          .rpc('get_apartments_with_profiles');
+          
+        if (rpcError) {
+          console.error('Failed to fetch apartments with RPC:', rpcError);
+          
+          // Fallback: try fetching apartments only without profile info
+          const { data: fallbackData, error: fallbackError } = await supabase
+            .from('apartments')
+            .select('*')
+            .order('created_at', { ascending: false });
+          
+          if (fallbackError) throw fallbackError;
+          setApartments(fallbackData || []);
+        } else {
+          setApartments(apartmentsData || []);
+        }
+      } catch (error) {
+        console.error('Error fetching apartments:', error);
+        setError('Failed to load apartments data.');
+      }
       
     } catch (error) {
       console.error('Error fetching admin data:', error);
@@ -711,7 +738,7 @@ export default function UserProfile() {
                         </Link>
                       </div>
                     ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6">
                         {savedApartments.map((item, index) => (
                           <motion.div 
                             key={item.id} 
@@ -721,8 +748,8 @@ export default function UserProfile() {
                             transition={{ duration: 0.3, delay: index * 0.1 }}
                             whileHover={{ y: -5 }}
                           >
-                            <div className="flex flex-col sm:flex-row h-full">
-                              <div className="w-full sm:w-1/3 h-32 sm:h-auto overflow-hidden">
+                            <div className="flex flex-col h-full">
+                              <div className="w-full h-40 md:h-48 overflow-hidden relative">
                                 <img
                                   src={
                                     item.apartments.apartment_images?.length
@@ -735,6 +762,22 @@ export default function UserProfile() {
                                   className="w-full h-full object-cover transition-transform hover:scale-110 duration-300"
                                   onError={(e) => { e.target.src = '/placeholder-apartment.jpg'; }}
                                 />
+                                <div className="absolute top-2 right-2">
+                                  <motion.button
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      handleRemoveSaved(item.id);
+                                    }}
+                                    className="p-1.5 bg-white/90 backdrop-blur-sm rounded-full text-red-600 hover:bg-white hover:text-red-700"
+                                    whileHover={{ scale: 1.1 }}
+                                    whileTap={{ scale: 0.95 }}
+                                  >
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                  </motion.button>
+                                </div>
                               </div>
                               
                               <div className="p-4 flex flex-col justify-between flex-grow">
@@ -743,7 +786,7 @@ export default function UserProfile() {
                                     {item.apartments.title}
                                   </h4>
                                   <p className="text-sm text-gray-500 mb-2">{item.apartments.location_description}</p>
-                                  <div className="flex items-center text-sm text-gray-700 flex-wrap">
+                                  <div className="flex items-center text-sm text-gray-700 flex-wrap gap-y-1">
                                     <span className="font-semibold">${item.apartments.price_per_month}</span>
                                     <span className="mx-1">/month</span>
                                     <span className="mx-2">•</span>
@@ -753,21 +796,13 @@ export default function UserProfile() {
                                   </div>
                                 </div>
                                 
-                                <div className="flex justify-between items-center mt-4">
+                                <div className="mt-4">
                                   <Link 
                                     to={`/apartments/${item.apartment_id}`} 
-                                    className="text-blue-600 text-sm hover:text-blue-800 transition-colors"
+                                    className="w-full inline-block text-center py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-md transition-colors"
                                   >
                                     View Details
                                   </Link>
-                                  <motion.button
-                                    onClick={() => handleRemoveSaved(item.id)}
-                                    className="text-red-600 text-sm hover:underline"
-                                    whileHover={{ scale: 1.05 }}
-                                    whileTap={{ scale: 0.95 }}
-                                  >
-                                    Remove
-                                  </motion.button>
                                 </div>
                               </div>
                             </div>
@@ -823,23 +858,23 @@ export default function UserProfile() {
                               <table className="min-w-full divide-y divide-gray-200">
                                 <thead className="bg-gray-50">
                                   <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Requested</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
+                                    <th className="px-3 py-3 md:px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                                    <th className="px-3 py-3 md:px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Business Info</th>
+                                    <th className="hidden md:table-cell px-3 py-3 md:px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Requested</th>
+                                    <th className="px-3 py-3 md:px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
                                   </tr>
                                 </thead>
                                 <tbody className="bg-white divide-y divide-gray-200">
                                   {pendingOwners.map(request => (
                                     <tr key={request.id}>
-                                      <td className="px-6 py-4 whitespace-nowrap">
+                                      <td className="px-3 py-3 md:px-6 md:py-4 whitespace-nowrap">
                                         <div className="flex items-center">
-                                          <div className="flex-shrink-0 h-10 w-10 rounded-full bg-gray-200 overflow-hidden">
+                                          <div className="flex-shrink-0 h-8 w-8 md:h-10 md:w-10 rounded-full bg-gray-200 overflow-hidden">
                                             {request.profiles?.avatar_url ? (
                                               <img 
                                                 src={getProfileImageUrl(request.profiles.avatar_url)} 
                                                 alt={request.profiles.full_name} 
-                                                className="h-10 w-10 object-cover"
+                                                className="h-full w-full object-cover"
                                                 onError={(e) => {
                                                   e.target.onerror = null;
                                                   e.target.src = '/images/default-avatar.svg';
@@ -851,24 +886,24 @@ export default function UserProfile() {
                                               </div>
                                             )}
                                           </div>
-                                          <div className="ml-4">
-                                            <div className="text-sm font-medium text-gray-900">
+                                          <div className="ml-2 md:ml-4">
+                                            <div className="text-xs md:text-sm font-medium text-gray-900 truncate max-w-[100px] md:max-w-full">
                                               {request.profiles?.full_name || 'Unknown User'}
                                             </div>
                                           </div>
                                         </div>
                                       </td>
-                                      <td className="px-6 py-4 whitespace-nowrap">
-                                        <div className="text-sm text-gray-500">{request.profiles?.email || 'No email'}</div>
-                                        <div className="text-sm text-gray-500">{request.phone_number || 'No phone'}</div>
+                                      <td className="px-3 py-3 md:px-6 md:py-4 whitespace-nowrap">
+                                        <div className="text-xs md:text-sm text-gray-500 truncate max-w-[100px] md:max-w-full">{request.business_name || 'No business name'}</div>
+                                        <div className="text-xs md:text-sm text-gray-500 truncate max-w-[100px] md:max-w-full">{request.business_phone || 'No phone'}</div>
                                       </td>
-                                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                      <td className="hidden md:table-cell px-3 py-3 md:px-6 md:py-4 whitespace-nowrap text-xs md:text-sm text-gray-500">
                                         {new Date(request.created_at).toLocaleDateString()}
                                       </td>
-                                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                      <td className="px-3 py-3 md:px-6 md:py-4 whitespace-nowrap text-xs md:text-sm font-medium">
                                         <button 
                                           onClick={() => handleApproveOwner(request.id)}
-                                          className="text-green-600 hover:text-green-900 mr-4"
+                                          className="text-green-600 hover:text-green-900 mr-2 md:mr-4"
                                         >
                                           Approve
                                         </button>
@@ -897,23 +932,23 @@ export default function UserProfile() {
                             <table className="min-w-full divide-y divide-gray-200">
                               <thead className="bg-gray-50">
                                 <tr>
-                                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
-                                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
-                                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
-                                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Joined</th>
+                                  <th className="px-3 py-3 md:px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                                  <th className="hidden md:table-cell px-3 py-3 md:px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                                  <th className="px-3 py-3 md:px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
+                                  <th className="hidden md:table-cell px-3 py-3 md:px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Joined</th>
                                 </tr>
                               </thead>
                               <tbody className="bg-white divide-y divide-gray-200">
                                 {adminUsers.slice(0, 10).map(profile => (
                                   <tr key={profile.id}>
-                                    <td className="px-6 py-4 whitespace-nowrap">
+                                    <td className="px-3 py-3 md:px-6 md:py-4 whitespace-nowrap">
                                       <div className="flex items-center">
-                                        <div className="flex-shrink-0 h-10 w-10 rounded-full bg-gray-200 overflow-hidden">
+                                        <div className="flex-shrink-0 h-8 w-8 md:h-10 md:w-10 rounded-full bg-gray-200 overflow-hidden">
                                           {profile.avatar_url ? (
                                             <img 
                                               src={getProfileImageUrl(profile.avatar_url)} 
                                               alt={profile.full_name} 
-                                              className="h-10 w-10 object-cover"
+                                              className="h-full w-full object-cover"
                                               onError={(e) => {
                                                 e.target.onerror = null;
                                                 e.target.src = '/images/default-avatar.svg';
@@ -925,17 +960,20 @@ export default function UserProfile() {
                                             </div>
                                           )}
                                         </div>
-                                        <div className="ml-4">
-                                          <div className="text-sm font-medium text-gray-900">
+                                        <div className="ml-2 md:ml-4">
+                                          <div className="text-xs md:text-sm font-medium text-gray-900 truncate max-w-[100px] md:max-w-full">
                                             {profile.full_name || 'Unnamed User'}
+                                          </div>
+                                          <div className="md:hidden text-xs text-gray-500 truncate max-w-[100px]">
+                                            {profile.email || 'No email'}
                                           </div>
                                         </div>
                                       </div>
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                    <td className="hidden md:table-cell px-3 py-3 md:px-6 md:py-4 whitespace-nowrap text-xs md:text-sm text-gray-500">
                                       {profile.email || 'No email'}
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
+                                    <td className="px-3 py-3 md:px-6 md:py-4 whitespace-nowrap">
                                       <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
                                         ${profile.role === 'admin' ? 'bg-red-100 text-red-800' : 
                                           profile.role === 'owner' ? 'bg-yellow-100 text-yellow-800' : 
@@ -943,7 +981,7 @@ export default function UserProfile() {
                                         {profile.role || 'user'}
                                       </span>
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                    <td className="hidden md:table-cell px-3 py-3 md:px-6 md:py-4 whitespace-nowrap text-xs md:text-sm text-gray-500">
                                       {profile.created_at ? new Date(profile.created_at).toLocaleDateString() : 'Unknown'}
                                     </td>
                                   </tr>
@@ -952,7 +990,7 @@ export default function UserProfile() {
                             </table>
                             
                             {adminUsers.length > 10 && (
-                              <div className="px-6 py-3 bg-gray-50 text-right text-sm">
+                              <div className="px-3 py-3 md:px-6 bg-gray-50 text-right text-xs md:text-sm">
                                 <span className="text-gray-500">Showing 10 of {adminUsers.length} users</span>
                               </div>
                             )}
@@ -969,29 +1007,30 @@ export default function UserProfile() {
                             <table className="min-w-full divide-y divide-gray-200">
                               <thead className="bg-gray-50">
                                 <tr>
-                                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Property</th>
-                                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Owner</th>
-                                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
-                                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                  <th className="px-3 py-3 md:px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Property</th>
+                                  <th className="hidden md:table-cell px-3 py-3 md:px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Owner</th>
+                                  <th className="px-3 py-3 md:px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
+                                  <th className="px-3 py-3 md:px-6 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                                 </tr>
                               </thead>
                               <tbody className="bg-white divide-y divide-gray-200">
                                 {apartments.slice(0, 5).map(apt => (
                                   <tr key={apt.id}>
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                      <div className="flex items-center">
-                                        <div className="text-sm font-medium text-gray-900">
-                                          {apt.title || 'Unnamed Property'}
-                                        </div>
+                                    <td className="px-3 py-3 md:px-6 md:py-4 whitespace-nowrap">
+                                      <div className="text-xs md:text-sm font-medium text-gray-900 truncate max-w-[100px] md:max-w-full">
+                                        {apt.title || 'Unnamed Property'}
+                                      </div>
+                                      <div className="md:hidden text-xs text-gray-500 truncate max-w-[100px]">
+                                        by {apt.owner_full_name || 'Unknown Owner'}
                                       </div>
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                      {apt.profiles?.full_name || 'Unknown Owner'}
+                                    <td className="hidden md:table-cell px-3 py-3 md:px-6 md:py-4 whitespace-nowrap text-xs md:text-sm text-gray-500">
+                                      {apt.owner_full_name || 'Unknown Owner'}
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                    <td className="px-3 py-3 md:px-6 md:py-4 whitespace-nowrap text-xs md:text-sm text-gray-500">
                                       ${apt.price_per_month}/month
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
+                                    <td className="px-3 py-3 md:px-6 md:py-4 whitespace-nowrap">
                                       <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
                                         ${apt.is_available ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
                                         {apt.is_available ? 'Available' : 'Unavailable'}
@@ -1003,7 +1042,7 @@ export default function UserProfile() {
                             </table>
                             
                             {apartments.length > 5 && (
-                              <div className="px-6 py-3 bg-gray-50 text-right text-sm">
+                              <div className="px-3 py-3 md:px-6 bg-gray-50 text-right text-xs md:text-sm">
                                 <span className="text-gray-500">Showing 5 of {apartments.length} apartments</span>
                               </div>
                             )}

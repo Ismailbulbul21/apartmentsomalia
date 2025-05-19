@@ -74,123 +74,98 @@ const MessagesButton = memo(({ user }) => {
   
   // Fetch recent conversations
   const fetchRecentConversations = async () => {
-    if (!user?.id) return;
-    
     try {
       setLoading(true);
       
-      // First check if there are any conversations at all
-      const { count, error: countError } = await supabase
-        .from('conversations')
-        .select('*', { count: 'exact', head: true })
-        .or(`participant_one.eq.${user.id},participant_two.eq.${user.id}`);
-        
-      if (countError) throw countError;
-      
-      if (count === 0) {
-        setConversations([]);
-        setLoading(false);
-        return;
-      }
-      
-      // Fetch recent conversations with a simpler approach
-      const { data, error } = await supabase
+      const { data: conversationsData, error: conversationsError } = await supabase
         .from('conversations')
         .select(`
-          id,
-          updated_at,
-          participant_one,
-          participant_two,
-          apartment_id,
+          *,
           apartments(id, title)
         `)
         .or(`participant_one.eq.${user.id},participant_two.eq.${user.id}`)
         .order('updated_at', { ascending: false })
         .limit(5);
+        
+      if (conversationsError) throw conversationsError;
       
-      if (error) throw error;
-      
-      console.log("Fetched conversations:", data);
-      
-      if (data && data.length > 0) {
+      if (conversationsData) {
         // Get all participant IDs to fetch profiles
         const participantIds = new Set();
         
-        data.forEach(conv => {
-          participantIds.add(conv.participant_one);
-          participantIds.add(conv.participant_two);
+        conversationsData.forEach(conv => {
+          if (conv.participant_one !== user.id) {
+            participantIds.add(conv.participant_one);
+          }
+          if (conv.participant_two !== user.id) {
+            participantIds.add(conv.participant_two);
+          }
         });
         
         // Fetch profiles for all participants
-        const { data: profiles, error: profilesError } = await supabase
+        const { data: profilesData, error: profilesError } = await supabase
           .from('profiles')
           .select('id, full_name, avatar_url')
           .in('id', Array.from(participantIds));
         
         if (profilesError) throw profilesError;
         
-        // Create map of profiles
-        const profileMap = {};
-        if (profiles) {
-          profiles.forEach(profile => {
-            profileMap[profile.id] = profile;
-          });
-        }
+        // Create a map of profiles by ID
+        const profilesMap = (profilesData || []).reduce((map, profile) => {
+          map[profile.id] = profile;
+          return map;
+        }, {});
         
-        // Get last messages and unread counts for each conversation
-        const enrichedConversations = await Promise.all(data.map(async (conv) => {
-          // Determine other participant (not current user)
+        // Add last message and unread count to each conversation
+        const enrichedData = await Promise.all(conversationsData.map(async (conv) => {
+          // Determine the other participant
           const otherParticipantId = conv.participant_one === user.id 
             ? conv.participant_two 
             : conv.participant_one;
-            
-          // Get the last message
-          const { data: lastMessageData, error: messageError } = await supabase
+          
+          // Get profile for the other participant
+          const otherParticipant = profilesMap[otherParticipantId] || { 
+            full_name: 'Unknown User' 
+          };
+          
+          // Get the last message for preview
+          const { data: lastMessageData } = await supabase
             .from('messages')
             .select('*')
             .eq('conversation_id', conv.id)
             .order('created_at', { ascending: false })
             .limit(1);
-            
-          if (messageError) throw messageError;
           
-          const lastMessage = lastMessageData && lastMessageData.length > 0 
-            ? lastMessageData[0] 
-            : null;
-            
           // Count unread messages
-          const { count: unreadCount, error: unreadError } = await supabase
+          const { count: unreadCount } = await supabase
             .from('messages')
             .select('*', { count: 'exact', head: true })
             .eq('conversation_id', conv.id)
             .eq('recipient_id', user.id)
             .eq('is_read', false);
-            
-          if (unreadError) throw unreadError;
+          
+          const lastMessage = lastMessageData && lastMessageData.length > 0 
+            ? lastMessageData[0] 
+            : null;
           
           return {
             ...conv,
-            otherParticipant: profileMap[otherParticipantId] || { full_name: 'Unknown User' },
+            otherParticipant,
             lastMessage,
             unreadCount: unreadCount || 0,
             hasUnread: (unreadCount || 0) > 0
           };
         }));
         
-        setConversations(enrichedConversations);
-        console.log("Enriched conversations:", enrichedConversations);
-      } else {
-        setConversations([]);
+        setConversations(enrichedData);
       }
     } catch (error) {
       console.error('Error fetching conversations:', error);
-      setConversations([]);
     } finally {
       setLoading(false);
     }
   };
   
-  // Navigate to messages tab with specific conversation
   const handleNavigateToMessages = (conversationId) => {
     try {
       // Mark messages as read immediately
@@ -264,7 +239,7 @@ const MessagesButton = memo(({ user }) => {
     <div className="relative messages-dropdown">
       <button 
         onClick={handleMessagesClick}
-        className="relative flex items-center justify-center p-2 text-gray-300 hover:text-white transition-colors"
+        className="relative flex items-center justify-center w-10 h-10 md:w-auto md:h-auto p-2 text-gray-300 hover:text-white transition-colors"
         aria-label="Messages"
       >
         <svg 
@@ -281,11 +256,11 @@ const MessagesButton = memo(({ user }) => {
           />
         </svg>
         
-        {/* Notification badge */}
+        {/* Notification badge - enhanced for better mobile visibility */}
         {showMessageNotification && (
-          <span className="absolute -top-1 -right-1 flex h-4 w-4">
+          <span className="absolute -top-1 -right-1 flex h-5 w-5">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-4 w-4 bg-red-500 text-xs text-white justify-center items-center">
+            <span className="relative inline-flex rounded-full h-5 w-5 bg-red-500 text-xs text-white justify-center items-center font-bold">
               {unreadMessages > 9 ? '9+' : unreadMessages}
             </span>
           </span>
@@ -295,13 +270,14 @@ const MessagesButton = memo(({ user }) => {
       <AnimatePresence>
         {isOpen && (
           <motion.div 
-            className="absolute right-0 mt-2 w-80 rounded-xl bg-gray-800 shadow-lg border border-gray-700 z-50"
+            className="absolute right-0 mt-2 w-[calc(100vw-32px)] sm:w-80 max-w-sm rounded-xl bg-gray-800 shadow-lg border border-gray-700 z-50"
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: 0.15 }}
+            style={{ maxHeight: '80vh', overflowY: 'auto' }}
           >
-            <div className="p-3 border-b border-gray-700 flex justify-between items-center">
+            <div className="p-3 border-b border-gray-700 flex justify-between items-center sticky top-0 bg-gray-800 z-10">
               <h3 className="text-sm font-medium text-white">Messages</h3>
               <Link 
                 to="/profile" 
@@ -313,34 +289,18 @@ const MessagesButton = memo(({ user }) => {
               </Link>
             </div>
             
-            <div className="max-h-96 overflow-y-auto">
+            <div className="max-h-[calc(80vh-100px)] overflow-y-auto">
               {loading ? (
-                <div className="p-4 text-center text-gray-400">
-                  <svg 
-                    className="animate-spin h-5 w-5 mx-auto mb-1"
-                    fill="none" 
-                    viewBox="0 0 24 24"
-                  >
-                    <circle 
-                      className="opacity-25" 
-                      cx="12" 
-                      cy="12" 
-                      r="10" 
-                      stroke="currentColor" 
-                      strokeWidth="4"
-                    ></circle>
-                    <path 
-                      className="opacity-75" 
-                      fill="currentColor" 
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    ></path>
-                  </svg>
-                  <p>Loading conversations...</p>
+                <div className="flex justify-center items-center py-8">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white"></div>
                 </div>
               ) : conversations.length === 0 ? (
-                <div className="p-4 text-center text-gray-400">
-                  <p>No messages yet</p>
-                  <p className="text-xs mt-1">Your conversations will appear here</p>
+                <div className="p-6 text-center text-gray-400">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 mx-auto mb-2 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                  </svg>
+                  <p className="text-sm mb-1">No messages yet</p>
+                  <p className="text-xs">Contact a property owner to get started</p>
                 </div>
               ) : (
                 <div>
@@ -357,6 +317,10 @@ const MessagesButton = memo(({ user }) => {
                               src={conv.otherParticipant.avatar_url}
                               alt={conv.otherParticipant.full_name}
                               className="w-8 h-8 rounded-full"
+                              onError={(e) => {
+                                e.target.onerror = null;
+                                e.target.src = '/images/default-avatar.svg';
+                              }}
                             />
                           ) : (
                             <div className="w-8 h-8 rounded-full bg-primary-600 flex items-center justify-center text-white text-sm font-medium">
@@ -400,7 +364,7 @@ const MessagesButton = memo(({ user }) => {
               )}
             </div>
             
-            <div className="p-3 border-t border-gray-700">
+            <div className="p-3 border-t border-gray-700 sticky bottom-0 bg-gray-800">
               <Link
                 to="/profile"
                 state={{ activeTab: 'messages' }}
