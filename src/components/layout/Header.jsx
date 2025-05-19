@@ -424,11 +424,46 @@ const ProfileButton = memo(({ user, userProfile, userRole, isAdminUser, isOwner,
   const [isOpen, setIsOpen] = useState(false);
   const navigate = useNavigate();
   const dropdownRef = useRef(null);
-  const { refreshUserProfile } = useAuth();
-  const [hasAttemptedRefresh, setHasAttemptedRefresh] = useState(false);
+  const { refreshUserProfile, authInitialized } = useAuth();
+  
+  // Initialize hasAttemptedRefresh from sessionStorage to persist across renders and reloads
+  const [hasAttemptedRefresh, setHasAttemptedRefresh] = useState(() => {
+    if (user?.id && window.sessionStorage) {
+      return sessionStorage.getItem(`profile_refresh_attempted_${user.id}`) === 'true';
+    }
+    return false;
+  });
+  
+  const [localUserProfile, setLocalUserProfile] = useState(null);
+  const initializedRef = useRef(false);
   
   // Show notification if owner status was just approved
   const showOwnerApprovalNotification = ownerStatus?.requestStatus === 'approved' && !ownerStatus?.isOwner;
+  
+  // Initialize localUserProfile from localStorage on mount and when user changes
+  useEffect(() => {
+    // Only run this once per user
+    if (user?.id && window.localStorage && !initializedRef.current) {
+      initializedRef.current = true;
+      
+      try {
+        const cachedProfile = localStorage.getItem(`user_profile_${user.id}`);
+        if (cachedProfile) {
+          console.log("Initializing local profile from localStorage for user:", user.id);
+          setLocalUserProfile(JSON.parse(cachedProfile));
+        }
+      } catch (e) {
+        console.warn('Error reading profile from localStorage:', e);
+      }
+    }
+  }, [user]);
+  
+  // Update localUserProfile when userProfile changes
+  useEffect(() => {
+    if (userProfile) {
+      setLocalUserProfile(userProfile);
+    }
+  }, [userProfile]);
   
   const handleLogout = async () => {
     const { success } = await logout();
@@ -487,34 +522,57 @@ const ProfileButton = memo(({ user, userProfile, userRole, isAdminUser, isOwner,
   
   // Try to load profile if user is available but profile isn't
   useEffect(() => {
-    // Single attempt flag - make it a state variable to persist between re-renders
-    if (user && !userProfile && !hasAttemptedRefresh) {
+    // Only attempt to refresh if auth is initialized and we have a user but no profile
+    if (authInitialized && user && !userProfile && !hasAttemptedRefresh) {
       console.log("User available but profile is null, refreshing profile");
+      
+      // Set flag immediately
       setHasAttemptedRefresh(true);
+      
+      // Store attempt in session storage to prevent repeated attempts across renders
+      if (window.sessionStorage) {
+        sessionStorage.setItem(`profile_refresh_attempted_${user.id}`, 'true');
+      }
       
       // Add a small delay to prevent rapid refreshes
       const timer = setTimeout(() => {
         refreshUserProfile()
           .then(profile => {
-            console.log("Profile refresh result:", profile ? "Profile loaded successfully" : "Profile refresh failed");
+            if (profile) {
+              setLocalUserProfile(profile);
+              console.log("Profile refresh result: Profile loaded successfully");
+            } else {
+              console.log("Profile refresh result: Profile refresh failed");
+              
+              // Try localStorage one more time
+              try {
+                const cachedProfile = localStorage.getItem(`user_profile_${user.id}`);
+                if (cachedProfile) {
+                  const parsedProfile = JSON.parse(cachedProfile);
+                  setLocalUserProfile(parsedProfile);
+                  console.log("Loaded profile from localStorage after refresh failed");
+                }
+              } catch (e) {
+                console.warn('Error reading profile from localStorage:', e);
+              }
+            }
           })
           .catch(err => {
             console.error("Error refreshing profile:", err);
-            // Don't attempt again to avoid infinite loops
           });
-      }, 800); // Increased delay to prevent rapid refreshes
+      }, 1500); // Increased delay to prevent rapid refreshes
       
       return () => clearTimeout(timer);
     }
-  }, [user, userProfile, refreshUserProfile, hasAttemptedRefresh]);
+  }, [user, userProfile, refreshUserProfile, hasAttemptedRefresh, authInitialized]);
   
   // Debug console log to check userProfile and avatar_url
   useEffect(() => {
     if (isAdminUser) {
-      console.log("Admin user profile:", userProfile);
-      console.log("Admin avatar URL:", userProfile?.avatar_url);
+      console.log("Admin user profile:", userProfile || localUserProfile);
+      console.log("Admin avatar URL:", (userProfile || localUserProfile)?.avatar_url);
     }
-  }, [userProfile, isAdminUser]);
+  }, [userProfile, localUserProfile, isAdminUser]);
   
   // Fix for profile image loading
   const refreshImageOnError = (e) => {
@@ -522,13 +580,17 @@ const ProfileButton = memo(({ user, userProfile, userRole, isAdminUser, isOwner,
     e.target.onerror = null;
     
     // Try to reload the image with a cache-busting parameter
-    if (userProfile?.avatar_url && userProfile.avatar_url.trim() !== '' && !e.target.src.includes('?v=')) {
-      e.target.src = `${userProfile.avatar_url}?v=${new Date().getTime()}`;
+    const profile = userProfile || localUserProfile;
+    if (profile?.avatar_url && profile.avatar_url.trim() !== '' && !e.target.src.includes('?v=')) {
+      e.target.src = `${profile.avatar_url}?v=${new Date().getTime()}`;
     } else {
       // Fall back to default if reload fails or URL is empty/null
       e.target.src = '/images/default-avatar.svg';
     }
   };
+  
+  // Use either provided userProfile or locally cached profile
+  const effectiveProfile = userProfile || localUserProfile;
   
   return (
     <div className="relative profile-dropdown" ref={dropdownRef}>
@@ -537,10 +599,10 @@ const ProfileButton = memo(({ user, userProfile, userRole, isAdminUser, isOwner,
         className="flex items-center space-x-2 px-3 py-2 rounded-full border border-gray-700 bg-gray-800 hover:bg-gray-700 transition-colors"
       >
         <div className="relative">
-          {userProfile && userProfile.avatar_url ? (
+          {effectiveProfile && effectiveProfile.avatar_url ? (
             <img 
-              src={userProfile.avatar_url}
-              alt={userProfile?.full_name || 'User'}
+              src={effectiveProfile.avatar_url}
+              alt={effectiveProfile?.full_name || 'User'}
               className="w-8 h-8 rounded-full object-cover"
               onError={refreshImageOnError}
             />
@@ -654,7 +716,7 @@ const ProfileButton = memo(({ user, userProfile, userRole, isAdminUser, isOwner,
 });
 
 export default function Header() {
-  const { user, userRole, logout, isAdmin, isOwner, isAdminUser, ownerStatus, userProfile } = useAuth();
+  const { user, userRole, logout, isAdmin, isOwner, isAdminUser, ownerStatus, userProfile, authInitialized } = useAuth();
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
@@ -680,6 +742,53 @@ export default function Header() {
     setMobileMenuOpen(!mobileMenuOpen);
   };
 
+  // Decide what to show while auth is initializing
+  const renderAuthButtons = () => {
+    if (!authInitialized) {
+      // Show loading state or skeleton while auth is initializing
+      return (
+        <div className="flex items-center ml-6 space-x-3">
+          <div className="w-20 h-9 bg-gray-700 animate-pulse rounded-md"></div>
+          <div className="w-20 h-9 bg-gray-700 animate-pulse rounded-md"></div>
+        </div>
+      );
+    }
+    
+    if (!user) {
+      return (
+        <div className="flex items-center ml-6 space-x-3">
+          <Link 
+            to="/login" 
+            className="px-4 py-2 text-primary-400 hover:text-primary-300 font-medium transition-colors"
+          >
+            Log In
+          </Link>
+          <Link 
+            to="/signup" 
+            className="px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-md shadow-md transition-all"
+          >
+            Sign Up
+          </Link>
+        </div>
+      );
+    }
+    
+    return (
+      <div className="flex items-center space-x-4">
+        <MessagesButton user={user} />
+        <ProfileButton 
+          user={user} 
+          userProfile={userProfile} 
+          userRole={userRole} 
+          isOwner={isOwner}
+          isAdminUser={isAdminUser}
+          ownerStatus={ownerStatus}
+          logout={logout}
+        />
+      </div>
+    );
+  };
+
   return (
     <header className={`sticky top-0 z-50 transition-all duration-300 ${
       scrolled 
@@ -699,37 +808,7 @@ export default function Header() {
             <NavLink to="/">Home</NavLink>
             <NavLink to="/contact">Contact</NavLink>
             
-            {!user ? (
-              <div className="flex items-center ml-6 space-x-3">
-                <Link 
-                  to="/login" 
-                  className="px-4 py-2 text-primary-400 hover:text-primary-300 font-medium transition-colors"
-                >
-                  Log In
-                </Link>
-                <Link 
-                  to="/signup" 
-                  className="px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-md shadow-md transition-all"
-                >
-                  Sign Up
-                </Link>
-              </div>
-            ) : (
-              <>
-                <div className="flex items-center space-x-4">
-                  <MessagesButton user={user} />
-                  <ProfileButton 
-                    user={user} 
-                    userProfile={userProfile} 
-                    userRole={userRole} 
-                    isOwner={isOwner}
-                    isAdminUser={isAdminUser}
-                    ownerStatus={ownerStatus}
-                    logout={logout}
-                  />
-                </div>
-              </>
-            )}
+            {renderAuthButtons()}
           </nav>
           
           {/* Mobile Menu Button */}
@@ -751,7 +830,7 @@ export default function Header() {
               )}
             </button>
             
-            {user && (
+            {authInitialized && user && (
               <div className="ml-3 flex items-center space-x-1">
                 <MessagesButton user={user} />
                 <ProfileButton 

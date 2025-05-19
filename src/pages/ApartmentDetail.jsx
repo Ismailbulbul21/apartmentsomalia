@@ -4,11 +4,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
-import SaveButton from '../components/ui/SaveButton';
 
 // Utility function to get image URL from storage path
 const getImageUrl = (path) => {
-  if (!path) {
+  // Handle null, undefined, or empty strings
+  if (!path || path.trim() === '') {
+    console.log('Empty or null path provided to getImageUrl, using placeholder');
     return '/images/placeholder-apartment.svg';
   }
   
@@ -20,19 +21,31 @@ const getImageUrl = (path) => {
   // For storage paths
   try {
     // Handle different path formats
-    let normalizedPath = path;
+    let normalizedPath = path.trim();
     
-    if (path.includes('apartment_images/')) {
-      normalizedPath = path.split('apartment_images/')[1];
-    } else if (!path.includes('/')) {
-      normalizedPath = `apartments/${path}`;
+    if (normalizedPath.includes('apartment_images/')) {
+      normalizedPath = normalizedPath.split('apartment_images/')[1];
+    } else if (!normalizedPath.includes('/')) {
+      normalizedPath = `apartments/${normalizedPath}`;
+    }
+    
+    // Make sure we don't pass an empty string to Supabase
+    if (!normalizedPath || normalizedPath === '') {
+      console.log('Normalized path is empty, using placeholder');
+      return '/images/placeholder-apartment.svg';
     }
     
     const { data } = supabase.storage
       .from('apartment_images')
       .getPublicUrl(normalizedPath);
     
-    return data.publicUrl || '/images/placeholder-apartment.svg';
+    // Make sure we have a valid URL before returning
+    if (data && data.publicUrl && data.publicUrl.trim() !== '') {
+      return data.publicUrl;
+    } else {
+      console.log('No valid publicUrl found in Supabase response, using placeholder');
+      return '/images/placeholder-apartment.svg';
+    }
   } catch (error) {
     console.error('Error generating image URL:', error, path);
     return '/images/placeholder-apartment.svg';
@@ -57,49 +70,98 @@ export default function ApartmentDetail() {
         setLoading(true);
         
         // Fetch apartment with images only
-        const { data, error } = await supabase
-          .from('apartments')
-          .select(`
-            *,
-            apartment_images(id, storage_path, is_primary)
-          `)
-          .eq('id', id)
-          .eq('status', 'approved')
-          .single();
+        console.log(`Fetching apartment with ID: ${id}`);
         
-        if (error) throw error;
-        
-        if (!data) {
-          throw new Error('Apartment not found');
-        }
-        
-        // Now fetch the owner profile separately
-        if (data.owner_id) {
-          const { data: ownerData, error: ownerError } = await supabase
-            .from('profiles')
-            .select('id, full_name, business_name, whatsapp_number, business_phone')
-            .eq('id', data.owner_id)
+        try {
+          // First try with the relationship query
+          const { data: apartmentData, error: apartmentError } = await supabase
+            .from('apartments')
+            .select(`
+              *,
+              apartment_images(id, storage_path, is_primary)
+            `)
+            .eq('id', id)
+            .eq('status', 'approved')
             .single();
-            
-          if (!ownerError && ownerData) {
-            setOwner(ownerData);
-          } else {
-            console.error('Error fetching owner:', ownerError);
+          
+          if (apartmentError) {
+            console.error('Error fetching apartment data:', apartmentError);
+            throw apartmentError;
           }
+          
+          if (!apartmentData) {
+            console.error('No apartment data found for ID:', id);
+            throw new Error('Apartment not found');
+          }
+          
+          console.log('Apartment data:', apartmentData);
+          console.log('Apartment images data:', apartmentData.apartment_images);
+          
+          // If apartment_images is undefined, try fetching them separately
+          if (!apartmentData.apartment_images) {
+            console.log('No apartment_images in original query, fetching separately...');
+            
+            // Fetch images separately as a fallback
+            const { data: imagesData, error: imagesError } = await supabase
+              .from('apartment_images')
+              .select('*')
+              .eq('apartment_id', id);
+              
+            if (!imagesError && imagesData && imagesData.length > 0) {
+              console.log('Successfully fetched images separately:', imagesData);
+              apartmentData.apartment_images = imagesData;
+            } else {
+              console.log('No images found in separate query or error:', imagesError);
+              // Initialize as empty array to prevent undefined errors
+              apartmentData.apartment_images = [];
+            }
+          }
+          
+          // Validate image data
+          if (apartmentData.apartment_images) {
+            // Filter out any invalid images
+            apartmentData.apartment_images = apartmentData.apartment_images.filter(img => img && img.storage_path && img.storage_path.trim() !== '');
+            console.log('Filtered apartment images:', apartmentData.apartment_images);
+          } else {
+            // Initialize as empty array to prevent undefined errors
+            apartmentData.apartment_images = [];
+          }
+          
+          // Set the apartment data
+          setApartment(apartmentData);
+          
+          // Now fetch the owner profile separately
+          if (apartmentData.owner_id) {
+            try {
+              const { data: ownerData, error: ownerError } = await supabase
+                .from('profiles')
+                .select('id, full_name, business_name, whatsapp_number, business_phone')
+                .eq('id', apartmentData.owner_id)
+                .single();
+                
+              if (!ownerError && ownerData) {
+                setOwner(ownerData);
+              } else {
+                console.error('Error fetching owner:', ownerError);
+              }
+            } catch (ownerError) {
+              console.error('Failed to fetch owner data:', ownerError);
+            }
+          }
+        } catch (fetchError) {
+          console.error('Failed to fetch apartment data:', fetchError);
+          throw fetchError;
         }
         
-        setApartment(data);
-        
-        // Fetch reviews
-        const { data: reviewsData, error: reviewsError } = await supabase
-          .from('reviews')
-          .select(`
-            *
-          `)
-          .eq('apartment_id', id)
-          .order('created_at', { ascending: false });
-        
-        if (reviewsError) throw reviewsError;
+        // Fetch reviews only after we've set the apartment data
+        try {
+          const { data: reviewsData, error: reviewsError } = await supabase
+            .from('reviews')
+            .select('*')
+            .eq('apartment_id', id)
+            .order('created_at', { ascending: false });
+          
+          if (reviewsError) throw reviewsError;
         
         if (reviewsData && reviewsData.length > 0) {
           // Fetch user profiles for reviews
@@ -135,6 +197,10 @@ export default function ApartmentDetail() {
             setReviews(reviewsData);
           }
         } else {
+          setReviews([]);
+        }
+        } catch (reviewError) {
+          console.error('Error fetching reviews:', reviewError);
           setReviews([]);
         }
       } catch (error) {
@@ -223,12 +289,37 @@ export default function ApartmentDetail() {
     );
   }
   
-  // Find primary image or first image
-  const primaryImage = apartment.apartment_images && apartment.apartment_images.find(img => img.is_primary);
-  const firstImage = apartment.apartment_images && apartment.apartment_images.length > 0 
-    ? apartment.apartment_images[0] 
-    : null;
-  const currentImage = apartment.apartment_images && apartment.apartment_images[activeImageIndex] || firstImage;
+  // Find primary image or first image with improved validation
+  let primaryImage = null;
+  let firstImage = null;
+  let currentImage = null;
+  
+  // Make sure apartment images exists and is an array
+  if (apartment.apartment_images && Array.isArray(apartment.apartment_images) && apartment.apartment_images.length > 0) {
+    console.log('Processing apartment images, count:', apartment.apartment_images.length);
+    
+    // Find primary image if it exists
+    primaryImage = apartment.apartment_images.find(img => img && img.is_primary && img.storage_path && img.storage_path.trim() !== '');
+    
+    // Get first valid image
+    const firstValidImage = apartment.apartment_images.find(img => img && img.storage_path && img.storage_path.trim() !== '');
+    firstImage = firstValidImage || null;
+    
+    // Get current image based on index, fallback to primary or first
+    currentImage = activeImageIndex < apartment.apartment_images.length 
+      ? apartment.apartment_images[activeImageIndex] 
+      : null;
+      
+    // Verify current image has a valid storage path
+    if (currentImage && (!currentImage.storage_path || currentImage.storage_path.trim() === '')) {
+      currentImage = null;
+    }
+  } else {
+    console.log('No valid apartment images found');
+  }
+  
+  // Final fallback - if no valid current image, use primary or first
+  currentImage = currentImage || primaryImage || firstImage;
   
   // Format prices and details
   const formattedPrice = new Intl.NumberFormat('en-US', {
@@ -270,14 +361,27 @@ export default function ApartmentDetail() {
               {/* Main Image */}
               <div className="lg:w-2/3 relative">
                 <div className="bg-night-900 aspect-[16/9]">
-                  {currentImage ? (
-                    <img 
-                      src={getImageUrl(currentImage.storage_path)} 
-                      alt={apartment.title}
-                      className="w-full h-full object-cover"
-                    />
+                  {currentImage && currentImage.storage_path && currentImage.storage_path.trim() !== '' ? (
+                    <>
+                      <img 
+                        src={getImageUrl(currentImage.storage_path)} 
+                        alt={apartment.title}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          console.log('Image failed to load:', currentImage.storage_path);
+                          e.target.onerror = null;
+                          e.target.src = '/images/placeholder-apartment.svg';
+                        }}
+                      />
+                      <div className="absolute inset-0 bg-night-900 opacity-0">
+                        {/* Invisible fallback that becomes visible if image fails */}
+                      </div>
+                    </>
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-night-900">
+                    <div className="w-full h-full flex flex-col items-center justify-center bg-night-900">
+                      <svg className="w-12 h-12 text-night-700 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
                       <p className="text-night-400">No image available</p>
                     </div>
                   )}
@@ -333,7 +437,6 @@ export default function ApartmentDetail() {
                     <h1 className="text-2xl font-bold mb-2">{apartment.title}</h1>
                     <p className="text-night-300 mb-4">{apartment.location_description}</p>
                   </div>
-                  <SaveButton apartmentId={apartment.id} />
                 </div>
                 
                 <div className="flex items-center mb-6">
@@ -397,22 +500,33 @@ export default function ApartmentDetail() {
             </div>
             
             {/* Thumbnail strip */}
-            {apartment.apartment_images && apartment.apartment_images.length > 1 && (
+            {apartment.apartment_images && Array.isArray(apartment.apartment_images) && apartment.apartment_images.length > 1 && (
               <div className="bg-night-950 p-4 border-t border-night-700">
                 <div className="flex space-x-2 overflow-x-auto pb-2">
                   {apartment.apartment_images.map((image, index) => (
                     <button
-                      key={image.id}
+                      key={image?.id || `thumb-${index}`}
                       onClick={() => setActiveImageIndex(index)}
                       className={`flex-shrink-0 w-20 h-20 ${
                         activeImageIndex === index ? 'ring-2 ring-primary-500' : ''
                       }`}
                     >
-                      <img 
-                        src={getImageUrl(image.storage_path)} 
-                        alt={`Thumbnail ${index + 1}`}
-                        className="w-full h-full object-cover"
-                      />
+                      {image && image.storage_path && image.storage_path.trim() !== '' ? (
+                        <img 
+                          src={getImageUrl(image.storage_path)} 
+                          alt={`Thumbnail ${index + 1}`}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            console.log('Thumbnail failed to load:', image.storage_path);
+                            e.target.onerror = null;
+                            e.target.src = '/images/placeholder-apartment.svg';
+                          }}
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center bg-night-800">
+                          <span className="text-xs text-night-400">No image</span>
+                        </div>
+                      )}
                     </button>
                   ))}
                 </div>
@@ -427,10 +541,27 @@ export default function ApartmentDetail() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Left Column - Details */}
           <div className="lg:col-span-2">
+            {/* About Section with Location */}
             <div className="bg-night-800 border border-night-700 shadow-lg rounded-xl p-6 mb-8">
               <h2 className="text-xl font-semibold mb-4">About this apartment</h2>
+              
+              {/* Location (now more prominent) */}
+              <div className="mb-5 p-4 bg-night-750 rounded-lg border border-night-600">
+                <h3 className="text-lg font-bold text-primary-300 mb-2">Location</h3>
+                {apartment.location_description ? (
+                  <p className="text-white">{apartment.location_description}</p>
+                ) : (
+                  <p className="text-night-400 italic">Location details not available</p>
+                )}
+              </div>
+              
+              {/* Description */}
               <div className="prose prose-invert max-w-none text-night-300">
-                <p>{apartment.description}</p>
+                {apartment.description ? (
+                  <p>{apartment.description}</p>
+                ) : (
+                  <p className="text-night-500 italic">No description available</p>
+                )}
               </div>
             </div>
             
@@ -551,7 +682,7 @@ export default function ApartmentDetail() {
             </div>
           </div>
           
-          {/* Right Column - Map and Owner */}
+          {/* Right Column - Owner Information */}
           <div className="lg:col-span-1">
             {/* Owner Box */}
             {owner && (
@@ -581,29 +712,54 @@ export default function ApartmentDetail() {
                       </svg>
                       Contact
                     </button>
-                    
-                    <SaveButton 
-                      apartmentId={apartment.id} 
-                      className="w-full flex justify-center dark:bg-night-700 dark:hover:bg-night-600 dark:border-night-600"
-                    />
                   </div>
                 )}
               </div>
             )}
             
-            {/* Location Map or placeholder */}
-            <div className="bg-night-800 border border-night-700 shadow-lg rounded-xl overflow-hidden">
-              <div className="aspect-square bg-night-900 flex items-center justify-center">
-                <div className="text-center p-6">
-                  <svg className="w-12 h-12 text-night-600 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                  <h3 className="text-lg font-semibold mb-2">Location</h3>
-                  <p className="text-night-400 mb-4">{apartment.location_description}</p>
-                  <p className="text-sm text-night-500">Map view unavailable</p>
+            {/* Additional Apartment Info */}
+            <div className="bg-night-800 border border-night-700 shadow-lg rounded-xl p-6">
+              <h3 className="text-lg font-semibold mb-4">Property Details</h3>
+              
+              {/* Available From */}
+              {apartment.available_from && (
+                <div className="mb-4">
+                  <h4 className="font-medium text-primary-300 mb-1">Available From</h4>
+                  <p className="text-night-200">
+                    {new Date(apartment.available_from).toLocaleDateString()}
+                  </p>
                 </div>
-              </div>
+              )}
+              
+              {/* Lease Length */}
+              {apartment.min_lease_months && (
+                <div className="mb-4">
+                  <h4 className="font-medium text-primary-300 mb-1">Minimum Lease</h4>
+                  <p className="text-night-200">{apartment.min_lease_months} months</p>
+                </div>
+              )}
+              
+              {/* Property Type */}
+              {apartment.property_type && (
+                <div className="mb-4">
+                  <h4 className="font-medium text-primary-300 mb-1">Property Type</h4>
+                  <p className="text-night-200">{apartment.property_type}</p>
+                </div>
+              )}
+              
+              {/* Deposit */}
+              {apartment.deposit_amount && (
+                <div>
+                  <h4 className="font-medium text-primary-300 mb-1">Security Deposit</h4>
+                  <p className="text-night-200">
+                    {new Intl.NumberFormat('en-US', {
+                      style: 'currency',
+                      currency: 'USD',
+                      minimumFractionDigits: 0
+                    }).format(apartment.deposit_amount)}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </div>

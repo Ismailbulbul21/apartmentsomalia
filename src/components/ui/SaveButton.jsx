@@ -14,30 +14,34 @@ export default function SaveButton({ apartmentId, onSuccess, className = '' }) {
   // Check if apartment is already saved when component mounts
   useEffect(() => {
     const checkIfSaved = async () => {
-      if (!user) {
+      if (!user || !apartmentId) {
+        console.log('SaveButton: Missing user or apartmentId', { userId: user?.id, apartmentId });
         setInitialCheck(false);
         return;
       }
 
       try {
         setLoading(true);
+        console.log(`SaveButton: Checking saved status for apartment ${apartmentId} and user ${user.id}`);
         
         const { data, error } = await supabase
           .from('saved_apartments')
           .select('id')
           .eq('user_id', user.id)
-          .eq('apartment_id', apartmentId)
-          .single();
+          .eq('apartment_id', apartmentId);
         
         if (error) {
-          if (error.code !== 'PGRST116') { // PGRST116 means no rows returned
-            console.error('Error checking saved status:', error);
-          }
+          console.error('Error checking saved status:', error);
           setIsSaved(false);
           setSavedId(null);
-        } else if (data) {
+        } else if (data && data.length > 0) {
+          console.log('SaveButton: Apartment is saved', data[0]);
           setIsSaved(true);
-          setSavedId(data.id);
+          setSavedId(data[0].id);
+        } else {
+          console.log('SaveButton: Apartment is not saved');
+          setIsSaved(false);
+          setSavedId(null);
         }
       } catch (error) {
         console.error('Unexpected error checking saved status:', error);
@@ -59,7 +63,7 @@ export default function SaveButton({ apartmentId, onSuccess, className = '' }) {
     try {
       setLoading(true);
 
-      if (isSaved) {
+      if (isSaved && savedId) {
         // Unsave the apartment
         const { error } = await supabase
           .from('saved_apartments')
@@ -68,6 +72,7 @@ export default function SaveButton({ apartmentId, onSuccess, className = '' }) {
         
         if (error) throw error;
         
+        console.log('SaveButton: Successfully removed apartment from saved list');
         setIsSaved(false);
         setSavedId(null);
         if (onSuccess) onSuccess(false);
@@ -84,8 +89,11 @@ export default function SaveButton({ apartmentId, onSuccess, className = '' }) {
         
         if (error) throw error;
         
+        console.log('SaveButton: Successfully saved apartment', data);
         setIsSaved(true);
-        setSavedId(data[0].id);
+        if (data && data.length > 0) {
+          setSavedId(data[0].id);
+        }
         if (onSuccess) onSuccess(true);
       }
     } catch (error) {
@@ -96,9 +104,10 @@ export default function SaveButton({ apartmentId, onSuccess, className = '' }) {
     }
   };
 
+  // More visible button styles
   const buttonStyle = isSaved 
-    ? "bg-red-50 hover:bg-red-100 text-red-600 border-red-200" 
-    : "bg-blue-50 hover:bg-blue-100 text-blue-600 border-blue-200";
+    ? "bg-red-50 hover:bg-red-100 text-red-600 border-red-200 dark:bg-red-900/30 dark:hover:bg-red-800/50 dark:text-red-400 dark:border-red-800" 
+    : "bg-blue-50 hover:bg-blue-100 text-blue-600 border-blue-200 dark:bg-blue-900/30 dark:hover:bg-blue-800/50 dark:text-blue-400 dark:border-blue-800";
 
   return (
     <button
@@ -115,7 +124,7 @@ export default function SaveButton({ apartmentId, onSuccess, className = '' }) {
         </svg>
       ) : (
         <svg 
-          className={`h-5 w-5 ${isSaved ? 'text-red-600' : 'text-blue-600'}`} 
+          className={`h-5 w-5 ${isSaved ? 'text-red-600 dark:text-red-400' : 'text-blue-600 dark:text-blue-400'}`} 
           fill={isSaved ? 'currentColor' : 'none'} 
           stroke="currentColor" 
           viewBox="0 0 24 24"

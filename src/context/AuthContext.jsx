@@ -26,6 +26,49 @@ const getRoleFromLocalStorage = (userId) => {
   }
 };
 
+// Save last successful profile fetch timestamp
+const saveProfileFetchTime = (userId) => {
+  if (!userId) return;
+  try {
+    localStorage.setItem(`profile_fetch_time_${userId}`, Date.now().toString());
+  } catch (e) {
+    console.warn('Could not save profile fetch time:', e);
+  }
+};
+
+// Get last profile fetch time
+const getProfileFetchTime = (userId) => {
+  if (!userId) return 0;
+  try {
+    return parseInt(localStorage.getItem(`profile_fetch_time_${userId}`)) || 0;
+  } catch (e) {
+    return 0;
+  }
+};
+
+// Save profile data to localStorage for quick loading
+const saveProfileToLocalStorage = (userId, profile) => {
+  if (!userId || !profile) return;
+  try {
+    localStorage.setItem(`user_profile_${userId}`, JSON.stringify(profile));
+    saveProfileFetchTime(userId);
+  } catch (e) {
+    console.warn('Could not save profile to localStorage:', e);
+  }
+};
+
+// Get profile from localStorage
+const getProfileFromLocalStorage = (userId) => {
+  if (!userId) return null;
+  try {
+    const profileData = localStorage.getItem(`user_profile_${userId}`);
+    return profileData ? JSON.parse(profileData) : null;
+  } catch (e) {
+    console.warn('Could not read profile from localStorage:', e);
+    return null;
+  }
+};
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -39,6 +82,7 @@ export function AuthProvider({ children }) {
   });
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [showMessageNotification, setShowMessageNotification] = useState(false);
+  const [authInitialized, setAuthInitialized] = useState(false);
 
   // Function to set user role with localStorage persistence
   const setUserRoleWithPersistence = (userId, role) => {
@@ -79,7 +123,7 @@ export function AuthProvider({ children }) {
 
   // Refresh owner status periodically when logged in
   useEffect(() => {
-    if (user?.id) {
+    if (user?.id && authInitialized) {
       // Check initially
       checkOwnerStatus();
       
@@ -88,7 +132,15 @@ export function AuthProvider({ children }) {
       
       return () => clearInterval(interval);
     }
-  }, [user]);
+  }, [user, authInitialized]);
+
+  // Process avatar URL safely
+  const processAvatarUrl = (url) => {
+    if (!url || url.trim() === '') {
+      return null;
+    }
+    return getProfileImageUrl(url);
+  };
 
   // Function to fetch user profile and role
   const fetchUserProfile = async (userId) => {
@@ -100,6 +152,23 @@ export function AuthProvider({ children }) {
       if (cachedRole) {
         console.log('Found cached role:', cachedRole);
         setUserRole(cachedRole);
+      }
+      
+      // Try to get cached profile data first
+      const cachedProfile = getProfileFromLocalStorage(userId);
+      const lastFetchTime = getProfileFetchTime(userId);
+      const profileCacheTTL = 5 * 60 * 1000; // 5 minutes
+      
+      // Use cached profile if it exists and is fresh (within last 5 minutes)
+      if (cachedProfile && Date.now() - lastFetchTime < profileCacheTTL) {
+        console.log('Using cached profile data');
+        setUserProfile(cachedProfile);
+        setUserRoleWithPersistence(userId, cachedProfile.role || 'user');
+        
+        // Still fetch fresh data in the background
+        setTimeout(() => refreshProfileInBackground(userId), 100);
+        
+        return cachedProfile;
       }
       
       // Special case for known admin user
@@ -116,29 +185,33 @@ export function AuthProvider({ children }) {
         
         if (!adminProfileError && adminProfile) {
           // Process avatar URL if present
-          if (adminProfile.avatar_url && adminProfile.avatar_url.trim() !== '') {
-            adminProfile.avatar_url = getProfileImageUrl(adminProfile.avatar_url);
-          } else {
-            // Explicitly set to null if empty to avoid empty string issues
-            adminProfile.avatar_url = null;
-          }
+          adminProfile.avatar_url = processAvatarUrl(adminProfile.avatar_url);
           
           console.log('Admin profile found:', adminProfile);
           
-          // Return actual profile with admin role
-          return {
+          // Add the role field
+          const profileWithRole = {
             ...adminProfile,
             role: 'admin'
           };
+          
+          // Save to localStorage
+          saveProfileToLocalStorage(userId, profileWithRole);
+          
+          // Return actual profile with admin role
+          return profileWithRole;
         }
         
         // Fallback to hardcoded values if profile fetch fails
-        return { 
+        const fallbackProfile = { 
           id: userId,
           role: 'admin', 
           full_name: 'Admin User',
           avatar_url: null // Explicitly set null
         };
+        
+        saveProfileToLocalStorage(userId, fallbackProfile);
+        return fallbackProfile;
       }
       
       let profileData = null;
@@ -194,14 +267,7 @@ export function AuthProvider({ children }) {
       // Process the profile data
       if (profileData) {
         // Process avatar URL if present
-        if (profileData.avatar_url) {
-          if (profileData.avatar_url && profileData.avatar_url.trim() !== '') {
-            profileData.avatar_url = getProfileImageUrl(profileData.avatar_url);
-          } else {
-            // Set to null to avoid empty string issues
-            profileData.avatar_url = null;
-          }
-        }
+        profileData.avatar_url = processAvatarUrl(profileData.avatar_url);
         
         // Save to localStorage for future use
         if (profileData.role) {
@@ -209,27 +275,91 @@ export function AuthProvider({ children }) {
           setUserRole(profileData.role);
         }
         
+        // Save the complete profile to localStorage
+        saveProfileToLocalStorage(userId, profileData);
+        
         console.log('Profile data loaded successfully:', profileData);
         return profileData;
       }
       
       // Default fallback
       if (cachedRole) {
-        return { id: userId, role: cachedRole, full_name: 'User', avatar_url: null };
+        const defaultProfile = { id: userId, role: cachedRole, full_name: 'User', avatar_url: null };
+        saveProfileToLocalStorage(userId, defaultProfile);
+        return defaultProfile;
       }
       
-      return { id: userId, role: 'user', full_name: 'Default User', avatar_url: null };
+      const userProfile = { id: userId, role: 'user', full_name: 'Default User', avatar_url: null };
+      saveProfileToLocalStorage(userId, userProfile);
+      return userProfile;
     } catch (err) {
       console.error('Profile fetch error:', err);
       
       // Try localStorage as fallback in case of error
       const cachedRole = getRoleFromLocalStorage(userId);
       if (cachedRole) {
-        return { id: userId, role: cachedRole, full_name: 'User', avatar_url: null };
+        const fallbackProfile = { id: userId, role: cachedRole, full_name: 'User', avatar_url: null };
+        saveProfileToLocalStorage(userId, fallbackProfile);
+        return fallbackProfile;
       }
       
       // Default to user role as failsafe
-      return { id: userId, role: 'user', full_name: 'Default User', avatar_url: null };
+      const defaultProfile = { id: userId, role: 'user', full_name: 'Default User', avatar_url: null };
+      saveProfileToLocalStorage(userId, defaultProfile);
+      return defaultProfile;
+    }
+  };
+
+  // Background refresh profile without affecting UI state
+  const refreshProfileInBackground = async (userId) => {
+    try {
+      // Fetch most up-to-date profile directly
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+        
+      if (profileError) {
+        return;
+      }
+      
+      // If we have profile data, determine role
+      if (profileData) {
+        // Process avatar URL
+        profileData.avatar_url = processAvatarUrl(profileData.avatar_url);
+        
+        // Determine user role
+        let role = 'user';
+        
+        // Admin check
+        if (userId === ADMIN_USER_ID) {
+          role = 'admin';
+        } else {
+          // Check if user is an owner
+          const { data: ownerData } = await supabase
+            .from('owner_requests')
+            .select('status')
+            .eq('user_id', userId)
+            .eq('status', 'approved')
+            .maybeSingle();
+            
+          if (ownerData) {
+            role = 'owner';
+          }
+        }
+        
+        // Create the full profile object
+        const fullProfile = {
+          ...profileData,
+          role
+        };
+        
+        // Update localStorage cache
+        saveProfileToLocalStorage(userId, fullProfile);
+      }
+    } catch (error) {
+      console.error('Background profile refresh error:', error);
     }
   };
 
@@ -244,6 +374,7 @@ export function AuthProvider({ children }) {
         // Set a timeout to ensure loading state doesn't get stuck - reduce from 5s to 3s
         authTimeout = setTimeout(() => {
           setLoading(false);
+          setAuthInitialized(true);
           
           // Force admin role for known admin user
           if (user?.id === ADMIN_USER_ID) {
@@ -257,7 +388,14 @@ export function AuthProvider({ children }) {
         if (session?.user) {
           setUser(session.user);
           
-          // Fetch profile data
+          // Try to get cached profile immediately
+          const cachedProfile = getProfileFromLocalStorage(session.user.id);
+          if (cachedProfile) {
+            setUserProfile(cachedProfile);
+            setUserRoleWithPersistence(session.user.id, cachedProfile.role || 'user');
+          }
+          
+          // Fetch profile data (will use cache if available)
           const profile = await fetchUserProfile(session.user.id);
           
           if (profile) {
@@ -273,11 +411,15 @@ export function AuthProvider({ children }) {
           setUserRole(null);
           setUserProfile(null);
         }
+        
+        // Auth is now initialized
+        setAuthInitialized(true);
       } catch (error) {
         console.error('Auth initialization error:', error);
       } finally {
         clearTimeout(authTimeout);
         setLoading(false);
+        setAuthInitialized(true);
       }
     };
 
@@ -288,6 +430,13 @@ export function AuthProvider({ children }) {
       async (event, session) => {
         if (event === 'SIGNED_IN' && session?.user) {
           setUser(session.user);
+          
+          // Try to use cached profile for immediate update
+          const cachedProfile = getProfileFromLocalStorage(session.user.id);
+          if (cachedProfile) {
+            setUserProfile(cachedProfile);
+            setUserRoleWithPersistence(session.user.id, cachedProfile.role || 'user');
+          }
           
           // Fetch profile data
           const profile = await fetchUserProfile(session.user.id);
@@ -388,6 +537,9 @@ export function AuthProvider({ children }) {
       try {
         if (user?.id) {
           localStorage.removeItem(`user_role_${user.id}`);
+          localStorage.removeItem(`user_profile_${user.id}`);
+          localStorage.removeItem(`profile_fetch_time_${user.id}`);
+          localStorage.removeItem(`last_profile_refresh_${user.id}`);
         }
       } catch (e) {
         console.warn('Error clearing localStorage cache:', e);
@@ -533,7 +685,7 @@ export function AuthProvider({ children }) {
 
   // Refresh unread messages count periodically when logged in
   useEffect(() => {
-    if (user?.id) {
+    if (user?.id && authInitialized) {
       // Check initially
       checkUnreadMessages();
       
@@ -561,7 +713,7 @@ export function AuthProvider({ children }) {
         supabase.removeChannel(messageSubscription);
       };
     }
-  }, [user]);
+  }, [user, authInitialized]);
 
   const value = {
     user,
@@ -576,6 +728,7 @@ export function AuthProvider({ children }) {
     isOwner,
     ownerStatus,
     refreshOwnerStatus,
+    authInitialized,
     // Special admin flag that can be checked directly
     isAdminUser: user?.id === ADMIN_USER_ID || userRole === 'admin',
     // Message notification features
@@ -592,7 +745,7 @@ export function AuthProvider({ children }) {
           // Check if we recently refreshed to prevent infinite loops
           const now = Date.now();
           const lastRefresh = parseInt(localStorage.getItem(`last_profile_refresh_${user.id}`)) || 0;
-          const refreshThreshold = 3000; // 3 seconds
+          const refreshThreshold = 5000; // 5 seconds
           
           // Check if userProfile is already set to avoid unnecessary refreshes
           if (userProfile && userProfile.id === user.id) {
@@ -607,6 +760,22 @@ export function AuthProvider({ children }) {
           
           // Update the refresh timestamp
           localStorage.setItem(`last_profile_refresh_${user.id}`, now.toString());
+          
+          // Try cached version first for immediate response
+          const cachedProfile = getProfileFromLocalStorage(user.id);
+          const shouldUseCachedVersion = cachedProfile && 
+                                        Date.now() - getProfileFetchTime(user.id) < 300000; // 5 minutes
+          
+          if (shouldUseCachedVersion) {
+            if (!userProfile) {
+              setUserProfile(cachedProfile);
+              setUserRoleWithPersistence(user.id, cachedProfile.role || 'user');
+            }
+            
+            // Still fetch updated data in background
+            refreshProfileInBackground(user.id);
+            return cachedProfile;
+          }
           
           // Directly query the database for most up-to-date profile
           const { data: profileData, error: profileError } = await supabase
@@ -637,12 +806,7 @@ export function AuthProvider({ children }) {
           // If we have profile data, determine role
           if (profileData) {
             // Process avatar URL
-            if (profileData.avatar_url && profileData.avatar_url.trim() !== '') {
-              profileData.avatar_url = getProfileImageUrl(profileData.avatar_url);
-            } else {
-              // Set to null if empty or undefined
-              profileData.avatar_url = null;
-            }
+            profileData.avatar_url = processAvatarUrl(profileData.avatar_url);
             
             // Determine user role
             let role = 'user';
@@ -674,6 +838,9 @@ export function AuthProvider({ children }) {
             console.log('Updated profile:', fullProfile);
             setUserRoleWithPersistence(user.id, role);
             setUserProfile(fullProfile);
+            
+            // Update localStorage cache
+            saveProfileToLocalStorage(user.id, fullProfile);
             
             // Also refresh other related states
             await checkOwnerStatus();
