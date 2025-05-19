@@ -4,30 +4,123 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://evkttwkermhcyizywzpe.supabase.co';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV2a3R0d2tlcm1oY3lpenl3enBlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDc0MTMzOTAsImV4cCI6MjA2Mjk4OTM5MH0._Dksvs00hB1wr4IyMXAlNTkj3F7khSf1QBAAwurbt1g';
 
-// Cache configuration for better performance
+// Improved cache configuration for better performance and reliability
 const supabaseOptions = {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: false
+    detectSessionInUrl: true,
+    storageKey: 'apartments-auth-token',
+    storage: {
+      getItem: (key) => {
+        try {
+          return localStorage.getItem(key);
+        } catch (error) {
+          console.warn('localStorage access failed:', error);
+          return null;
+        }
+      },
+      setItem: (key, value) => {
+        try {
+          localStorage.setItem(key, value);
+          return true;
+        } catch (error) {
+          console.warn('localStorage write failed:', error);
+          return false;
+        }
+      },
+      removeItem: (key) => {
+        try {
+          localStorage.removeItem(key);
+          return true;
+        } catch (error) {
+          console.warn('localStorage remove failed:', error);
+          return false;
+        }
+      }
+    }
   },
   global: {
     fetch: (url, options) => {
-      // Set a shorter timeout
-      const timeout = 15000;
+      // Increase timeout for better reliability
+      const timeout = 30000; // 30 seconds
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeout);
       
-      return fetch(url, {
-        ...options,
-        signal: controller.signal,
-      }).finally(() => clearTimeout(timeoutId));
+      // Add retry logic for network errors
+      const MAX_RETRIES = 3;
+      let retryCount = 0;
+      
+      const fetchWithRetry = async () => {
+        try {
+          return await fetch(url, {
+            ...options,
+            signal: controller.signal,
+            headers: {
+              ...options?.headers,
+              'Cache-Control': 'no-cache',
+            }
+          });
+        } catch (error) {
+          if (retryCount < MAX_RETRIES && 
+              (error.name === 'AbortError' || error.name === 'TypeError' || error.name === 'NetworkError')) {
+            retryCount++;
+            // Exponential backoff: 1s, 2s, 4s
+            const delay = 1000 * Math.pow(2, retryCount - 1);
+            console.log(`Fetch retry ${retryCount}/${MAX_RETRIES} after ${delay}ms`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            return fetchWithRetry();
+          }
+          throw error;
+        }
+      };
+      
+      return fetchWithRetry().finally(() => clearTimeout(timeoutId));
     }
   }
 };
 
 // Create singleton Supabase client
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, supabaseOptions);
+
+// Add connection health check
+let isConnectionHealthy = true;
+export const checkConnection = async () => {
+  try {
+    // Quick lightweight query to test connection
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('count(*)')
+      .limit(1)
+      .single();
+      
+    isConnectionHealthy = !error;
+    return { isHealthy: isConnectionHealthy, error };
+  } catch (err) {
+    isConnectionHealthy = false;
+    console.error('Connection health check failed:', err);
+    return { isHealthy: false, error: err };
+  }
+};
+
+// Auto-recovery for session
+export const recoverSession = async () => {
+  try {
+    const { data: { session }, error } = await supabase.auth.getSession();
+    if (error) throw error;
+    
+    if (!session) {
+      // Session lost, attempt to recover from localStorage
+      await supabase.auth.refreshSession();
+      return { recovered: true };
+    }
+    
+    return { recovered: false, hasSession: !!session };
+  } catch (err) {
+    console.error('Session recovery failed:', err);
+    return { recovered: false, error: err };
+  }
+};
 
 /**
  * Helper function to upload an image to storage and create a record in apartment_images

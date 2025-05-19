@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react';
-import { supabase, getProfileImageUrl } from '../lib/supabase';
+import { supabase, getProfileImageUrl, checkConnection, recoverSession } from '../lib/supabase';
 
 const AuthContext = createContext();
 
@@ -39,6 +39,8 @@ export function AuthProvider({ children }) {
   });
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [showMessageNotification, setShowMessageNotification] = useState(false);
+  const [connectionError, setConnectionError] = useState(false);
+  const [reconnectAttempt, setReconnectAttempt] = useState(0);
 
   // Function to set user role with localStorage persistence
   const setUserRoleWithPersistence = (userId, role) => {
@@ -50,14 +52,56 @@ export function AuthProvider({ children }) {
     }
   };
 
+  // Function to check and recover database connection
+  const checkAndRecoverConnection = async () => {
+    try {
+      const { isHealthy, error } = await checkConnection();
+      
+      if (!isHealthy) {
+        console.warn('Detected connection issues:', error);
+        setConnectionError(true);
+        
+        // Schedule reconnection attempt
+        const nextAttempt = reconnectAttempt + 1;
+        setReconnectAttempt(nextAttempt);
+        
+        // Exponential backoff for reconnection (max 30s)
+        const delay = Math.min(Math.pow(2, nextAttempt) * 1000, 30000);
+        setTimeout(() => checkAndRecoverConnection(), delay);
+      } else {
+        // Connection is healthy, clear error state if it was set
+        if (connectionError) {
+          console.log('Connection recovered');
+          setConnectionError(false);
+          setReconnectAttempt(0);
+          
+          // Re-initialize auth if user exists but profile data might be incomplete
+          if (user && !userProfile) {
+            initializeUserData(user.id);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error checking connection:', err);
+      setConnectionError(true);
+    }
+  };
+
   // Check owner application status
   const checkOwnerStatus = async () => {
-    if (!user?.id) return;
+    if (!user?.id || connectionError) return;
     
     try {
       const { data, error } = await supabase.rpc('check_owner_status');
       
-      if (error) throw error;
+      if (error) {
+        if (error.message.includes('connection') || error.code === 'PGRST_CONNECTION_ERROR') {
+          setConnectionError(true);
+          setTimeout(() => checkAndRecoverConnection(), 2000);
+          return;
+        }
+        throw error;
+      }
       
       if (data) {
         setOwnerStatus({
@@ -79,7 +123,7 @@ export function AuthProvider({ children }) {
 
   // Refresh owner status periodically when logged in
   useEffect(() => {
-    if (user?.id) {
+    if (user?.id && !connectionError) {
       // Check initially
       checkOwnerStatus();
       
@@ -88,10 +132,14 @@ export function AuthProvider({ children }) {
       
       return () => clearInterval(interval);
     }
-  }, [user]);
+  }, [user, connectionError]);
 
   // Function to fetch user profile and role
   const fetchUserProfile = async (userId) => {
+    if (!userId || connectionError) {
+      return null;
+    }
+    
     try {
       console.log('Fetching profile for user:', userId);
       
@@ -157,6 +205,15 @@ export function AuthProvider({ children }) {
         }
       } catch (rpcErr) {
         console.error('RPC error:', rpcErr);
+        
+        // Check if this is a connection error
+        if (rpcErr.message && 
+            (rpcErr.message.includes('network') || 
+             rpcErr.message.includes('connection') || 
+             rpcErr.code === 'PGRST_CONNECTION_ERROR')) {
+          setConnectionError(true);
+          setTimeout(() => checkAndRecoverConnection(), 2000);
+        }
       }
       
       // If RPC failed, try direct database query as fallback
@@ -167,6 +224,22 @@ export function AuthProvider({ children }) {
           .select('*')
           .eq('id', userId)
           .single();
+          
+        if (directError) {
+          // Check for connection errors specifically
+          if (directError.message && 
+              (directError.message.includes('network') || 
+               directError.message.includes('connection') || 
+               directError.code === 'PGRST_CONNECTION_ERROR')) {
+            setConnectionError(true);
+            setTimeout(() => checkAndRecoverConnection(), 2000);
+            
+            // Use cached data if available while connection is being restored
+            if (cachedRole) {
+              return { id: userId, role: cachedRole, full_name: 'Cached User', avatar_url: null };
+            }
+          }
+        }
           
         if (!directError && directData) {
           // For direct query, we need to determine role separately
@@ -222,6 +295,15 @@ export function AuthProvider({ children }) {
     } catch (err) {
       console.error('Profile fetch error:', err);
       
+      // Check if this is a connection error
+      if (err.message && 
+          (err.message.includes('network') || 
+           err.message.includes('connection') ||
+           err.code === 'PGRST_CONNECTION_ERROR')) {
+        setConnectionError(true);
+        setTimeout(() => checkAndRecoverConnection(), 2000);
+      }
+      
       // Try localStorage as fallback in case of error
       const cachedRole = getRoleFromLocalStorage(userId);
       if (cachedRole) {
@@ -232,108 +314,163 @@ export function AuthProvider({ children }) {
       return { id: userId, role: 'user', full_name: 'Default User', avatar_url: null };
     }
   };
+  
+  // Function to initialize user data from ID
+  const initializeUserData = async (userId) => {
+    if (!userId) {
+      setLoading(false);
+      setUser(null);
+      setUserProfile(null);
+      setUserRole(null);
+      return;
+    }
+  
+    try {
+      // Fetch user profile data
+      const profileData = await fetchUserProfile(userId);
+      setUserProfile(profileData);
+      
+      if (profileData?.role) {
+        setUserRole(profileData.role);
+      }
+      
+      // Check for unread messages
+      if (!connectionError) {
+        checkUnreadMessages();
+      }
+    } catch (error) {
+      console.error('Error initializing user data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Initialize auth state
   useEffect(() => {
     let authTimeout;
+    let authSubscription;
     
     const initializeAuth = async () => {
       try {
         setLoading(true);
         
-        // Set a timeout to ensure loading state doesn't get stuck - reduce from 5s to 3s
+        // Set a timeout to ensure loading state doesn't get stuck
         authTimeout = setTimeout(() => {
           setLoading(false);
           
-          // Force admin role for known admin user
+          // Force admin role for known admin user if we have it
           if (user?.id === ADMIN_USER_ID) {
             setUserRole('admin');
           }
         }, 3000);
         
-        // Get current session
+        // Initial connection health check
+        await checkAndRecoverConnection();
+        
+        // Attempt session recovery if needed
+        await recoverSession();
+        
+        // Get initial session
         const { data: { session } } = await supabase.auth.getSession();
         
+        // If we have a session, set the user
         if (session?.user) {
           setUser(session.user);
-          
-          // Fetch profile data
-          const profile = await fetchUserProfile(session.user.id);
-          
-          if (profile) {
-            setUserRoleWithPersistence(session.user.id, profile.role || 'user');
-            // Store the full profile data for access across components
-            setUserProfile(profile);
-            console.log('Initial profile data:', profile);
-          } else {
-            setUserRoleWithPersistence(session.user.id, 'user');
-          }
+          // Initialize user data (profile, role, etc.)
+          await initializeUserData(session.user.id);
         } else {
+          // No session, clear user state
           setUser(null);
-          setUserRole(null);
           setUserProfile(null);
+          setUserRole(null);
+          setLoading(false);
         }
+        
+        // Set up auth state change listener
+        authSubscription = supabase.auth.onAuthStateChange(async (event, session) => {
+          console.log('Auth state change:', event);
+          
+          if (event === 'SIGNED_IN' && session?.user) {
+            setUser(session.user);
+            await initializeUserData(session.user.id);
+          } 
+          else if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
+            setUser(null);
+            setUserProfile(null);
+            setUserRole(null);
+            
+            // Clear role from localStorage
+            try {
+              Object.keys(localStorage)
+                .filter(key => key.startsWith('user_role_'))
+                .forEach(key => localStorage.removeItem(key));
+            } catch (e) {
+              console.warn('Error clearing localStorage:', e);
+            }
+          } 
+          else if (event === 'TOKEN_REFRESHED' && session?.user) {
+            // Just update the user object, no need to reload profile
+            setUser(session.user);
+          }
+        });
       } catch (error) {
         console.error('Auth initialization error:', error);
-      } finally {
-        clearTimeout(authTimeout);
         setLoading(false);
+        
+        // If there's an error, attempt to recover
+        setConnectionError(true);
+        setTimeout(() => checkAndRecoverConnection(), 2000);
       }
     };
-
+    
     initializeAuth();
+    
+    // Cleanup function
+    return () => {
+      clearTimeout(authTimeout);
+      if (authSubscription) {
+        authSubscription.unsubscribe();
+      }
+    };
+  }, []);
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (event === 'SIGNED_IN' && session?.user) {
-          setUser(session.user);
-          
-          // Fetch profile data
-          const profile = await fetchUserProfile(session.user.id);
-          if (profile) {
-            setUserRoleWithPersistence(session.user.id, profile.role || 'user');
-            setUserProfile(profile);
-          } else {
-            setUserRoleWithPersistence(session.user.id, 'user');
-          }
-        } else if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
-          setUser(null);
-          setUserRole(null);
-          setUserProfile(null);
-        } else if ((event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') && session?.user) {
-          // Always update user data on token refresh
-          setUser(session.user);
-          
-          // Fetch profile data
-          const profile = await fetchUserProfile(session.user.id);
-          if (profile) {
-            setUserRoleWithPersistence(session.user.id, profile.role || 'user');
-            setUserProfile(profile);
-          } else {
-            setUserRoleWithPersistence(session.user.id, 'user');
-          }
-        } else if (session?.user && (!user || user.id !== session.user.id)) {
-          // Session exists but user state doesn't match
-          setUser(session.user);
-          
-          // Fetch profile data
-          const profile = await fetchUserProfile(session.user.id);
-          if (profile) {
-            setUserRoleWithPersistence(session.user.id, profile.role || 'user');
-            setUserProfile(profile);
-          } else {
-            setUserRoleWithPersistence(session.user.id, 'user');
+  // Reconnection check on visibility change (tab focus)
+  useEffect(() => {
+    const handleVisibilityChange = async () => {
+      if (!document.hidden && (connectionError || !user)) {
+        console.log('Tab became visible, checking connection and session...');
+        await checkAndRecoverConnection();
+        
+        // Also check if we need to recover the session
+        const { recovered, hasSession } = await recoverSession();
+        
+        if (recovered || (hasSession && !user)) {
+          // Session recovered but our local state doesn't know it
+          // Re-initialize auth
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.user) {
+            setUser(session.user);
+            await initializeUserData(session.user.id);
           }
         }
       }
-    );
-
-    return () => {
-      subscription?.unsubscribe();
-      clearTimeout(authTimeout);
     };
-  }, []);
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    // Check when coming back from history navigation
+    window.addEventListener('pageshow', (event) => {
+      if (event.persisted) {
+        // Page was restored from the bfcache
+        handleVisibilityChange();
+      }
+    });
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('pageshow', handleVisibilityChange);
+    };
+  }, [connectionError, user]);
 
   // Login function
   const login = async (email, password) => {
@@ -696,7 +833,8 @@ export function AuthProvider({ children }) {
         }
       }
       return userProfile || null;
-    }
+    },
+    connectionError
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
