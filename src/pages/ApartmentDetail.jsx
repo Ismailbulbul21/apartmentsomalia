@@ -262,10 +262,10 @@ export default function ApartmentDetail() {
       <div className="bg-night-950 text-white min-h-screen py-16">
         <div className="container mx-auto px-4">
           <div className="bg-night-800 border border-night-700 p-6 rounded-xl text-center">
-            <h2 className="text-xl font-semibold mb-2 text-red-400">Error</h2>
+            <h2 className="text-xl font-semibold mb-2 text-red-400">Qalad</h2>
             <p className="text-night-300">{error}</p>
             <Link to="/" className="mt-6 inline-block px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-lg">
-              Back to Home
+              Ku laabo Bogga Hore
             </Link>
           </div>
         </div>
@@ -278,10 +278,10 @@ export default function ApartmentDetail() {
       <div className="bg-night-950 text-white min-h-screen py-16">
         <div className="container mx-auto px-4">
           <div className="bg-night-800 border border-night-700 p-6 rounded-xl text-center">
-            <h2 className="text-xl font-semibold mb-2">Apartment Not Found</h2>
-            <p className="text-night-300">We couldn't find the apartment you're looking for.</p>
-            <Link to="/" className="mt-6 inline-block px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-lg">
-              Back to Home
+                          <h2 className="text-xl font-semibold mb-2">Guriga Lama Helin</h2>
+              <p className="text-night-300">Ma heli karno guriga aad raadineyso.</p>
+              <Link to="/" className="mt-6 inline-block px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-lg">
+                Ku laabo Bogga Hore
             </Link>
           </div>
         </div>
@@ -451,19 +451,19 @@ export default function ApartmentDetail() {
                 <div className="grid grid-cols-2 gap-4 mb-6">
                   <div className="bg-night-900 rounded-lg p-3 text-center">
                     <span className="block text-primary-400 text-lg font-semibold">{apartment.rooms}</span>
-                    <span className="text-sm text-night-400">Rooms</span>
+                    <span className="text-sm text-night-400">Qolal</span>
                   </div>
                   <div className="bg-night-900 rounded-lg p-3 text-center">
                     <span className="block text-primary-400 text-lg font-semibold">{apartment.bathrooms}</span>
-                    <span className="text-sm text-night-400">Bathrooms</span>
+                    <span className="text-sm text-night-400">Musqulo</span>
                   </div>
                   <div className="bg-night-900 rounded-lg p-3 text-center">
                     <span className="block text-primary-400 text-lg font-semibold">{apartment.square_meters} m²</span>
-                    <span className="text-sm text-night-400">Area</span>
+                    <span className="text-sm text-night-400">Baaxad</span>
                   </div>
                   <div className="bg-night-900 rounded-lg p-3 text-center">
-                    <span className="block text-primary-400 text-lg font-semibold">{apartment.is_furnished ? 'Yes' : 'No'}</span>
-                    <span className="text-sm text-night-400">Furnished</span>
+                    <span className="block text-primary-400 text-lg font-semibold">{apartment.is_furnished ? 'Haa' : 'Maya'}</span>
+                    <span className="text-sm text-night-400">Fadhiga leh</span>
                   </div>
                 </div>
                 
@@ -491,7 +491,7 @@ export default function ApartmentDetail() {
                         <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                         </svg>
-                        Send Message
+                        Fariin Dir
                       </button>
                     </div>
                   </div>
@@ -543,15 +543,15 @@ export default function ApartmentDetail() {
           <div className="lg:col-span-2">
             {/* About Section with Location */}
             <div className="bg-night-800 border border-night-700 shadow-lg rounded-xl p-6 mb-8">
-              <h2 className="text-xl font-semibold mb-4">About this apartment</h2>
+              <h2 className="text-xl font-semibold mb-4">Faahfaahin Guriga</h2>
               
               {/* Location (now more prominent) */}
               <div className="mb-5 p-4 bg-night-750 rounded-lg border border-night-600">
-                <h3 className="text-lg font-bold text-primary-300 mb-2">Location</h3>
+                <h3 className="text-lg font-bold text-primary-300 mb-2">Goobta</h3>
                 {apartment.location_description ? (
                   <p className="text-white">{apartment.location_description}</p>
                 ) : (
-                  <p className="text-night-400 italic">Location details not available</p>
+                  <p className="text-night-400 italic">Faahfaahinta goobta lama heli karo</p>
                 )}
               </div>
               
@@ -560,21 +560,21 @@ export default function ApartmentDetail() {
                 {apartment.description ? (
                   <p>{apartment.description}</p>
                 ) : (
-                  <p className="text-night-500 italic">No description available</p>
+                  <p className="text-night-500 italic">Ma jiro faahfaahin</p>
                 )}
               </div>
             </div>
             
             {/* Amenities */}
             <div className="bg-night-800 border border-night-700 shadow-lg rounded-xl p-6 mb-8">
-              <h2 className="text-xl font-semibold mb-4">Amenities</h2>
+              <h2 className="text-xl font-semibold mb-4">Adeegyada</h2>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                 {apartment.has_electricity && (
                   <div className="flex items-center">
                     <svg className="w-5 h-5 mr-2 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                     </svg>
-                    <span className="text-night-200">Electricity</span>
+                    <span className="text-night-200">Korontada</span>
                   </div>
                 )}
                 {apartment.has_water && (
@@ -582,7 +582,7 @@ export default function ApartmentDetail() {
                     <svg className="w-5 h-5 mr-2 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
                     </svg>
-                    <span className="text-night-200">Water</span>
+                    <span className="text-night-200">Biyaha</span>
                   </div>
                 )}
                 {apartment.has_internet && (
@@ -590,7 +590,7 @@ export default function ApartmentDetail() {
                     <svg className="w-5 h-5 mr-2 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0" />
                     </svg>
-                    <span className="text-night-200">Internet</span>
+                    <span className="text-night-200">Internetka</span>
                   </div>
                 )}
                 {apartment.has_parking && (
@@ -598,7 +598,7 @@ export default function ApartmentDetail() {
                     <svg className="w-5 h-5 mr-2 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    <span className="text-night-200">Parking</span>
+                    <span className="text-night-200">Baarkinka</span>
                   </div>
                 )}
                 {apartment.has_security && (
@@ -606,7 +606,7 @@ export default function ApartmentDetail() {
                     <svg className="w-5 h-5 mr-2 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                     </svg>
-                    <span className="text-night-200">Security</span>
+                    <span className="text-night-200">Amniga</span>
                   </div>
                 )}
                 {apartment.is_furnished && (
@@ -614,7 +614,7 @@ export default function ApartmentDetail() {
                     <svg className="w-5 h-5 mr-2 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                     </svg>
-                    <span className="text-night-200">Furnished</span>
+                    <span className="text-night-200">Fadhiga leh</span>
                   </div>
                 )}
               </div>
@@ -623,21 +623,21 @@ export default function ApartmentDetail() {
             {/* Reviews Section */}
             <div className="bg-night-800 border border-night-700 shadow-lg rounded-xl p-6">
               <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-semibold">Reviews</h2>
+                <h2 className="text-xl font-semibold">Faallooyinka</h2>
                 
                 {user && (
                   <Link 
                     to={`/review/${apartment.id}`}
                     className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors"
                   >
-                    Write a Review
+                    Qor Faallo
                   </Link>
                 )}
               </div>
               
               {reviews.length === 0 ? (
                 <div className="text-center py-8">
-                  <p className="text-night-400">No reviews yet. Be the first to review!</p>
+                  <p className="text-night-400">Weli faallo malaha. Noqo qofka ugu horreeya ee faallo qora!</p>
                 </div>
               ) : (
                 <div className="space-y-6">
@@ -665,7 +665,7 @@ export default function ApartmentDetail() {
                           {review.review_replies.map(reply => (
                             <div key={reply.id} className="mb-2">
                               <div className="flex items-center">
-                                <span className="font-medium text-primary-400">Owner Reply</span>
+                                <span className="font-medium text-primary-400">Jawaabta Mulkiilaha</span>
                                 <span className="ml-2 text-xs text-night-400">
                                   {new Date(reply.created_at).toLocaleDateString()}
                                 </span>
@@ -687,14 +687,14 @@ export default function ApartmentDetail() {
             {/* Owner Box */}
             {owner && (
               <div className="bg-night-800 border border-night-700 shadow-lg rounded-xl p-6 mb-8">
-                <h3 className="text-lg font-semibold mb-4">Property Owner</h3>
+                <h3 className="text-lg font-semibold mb-4">Mulkiilaha Guriga</h3>
                 
                 <div className="flex items-center mb-4">
                   <div className="w-12 h-12 rounded-full bg-primary-900 flex items-center justify-center text-white text-xl font-bold mr-3">
-                    {owner.full_name?.charAt(0) || 'O'}
+                    {owner.full_name?.charAt(0) || 'M'}
                   </div>
                   <div>
-                    <p className="font-medium">{owner.full_name || "Owner"}</p>
+                    <p className="font-medium">{owner.full_name || "Mulkiile"}</p>
                     {owner.business_name && (
                       <p className="text-sm text-night-400">{owner.business_name}</p>
                     )}
@@ -710,7 +710,7 @@ export default function ApartmentDetail() {
                       <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                       </svg>
-                      Contact
+                      La xiriir
                     </button>
                   </div>
                 )}
@@ -719,12 +719,12 @@ export default function ApartmentDetail() {
             
             {/* Additional Apartment Info */}
             <div className="bg-night-800 border border-night-700 shadow-lg rounded-xl p-6">
-              <h3 className="text-lg font-semibold mb-4">Property Details</h3>
+              <h3 className="text-lg font-semibold mb-4">Faahfaahinta Guriga</h3>
               
               {/* Available From */}
               {apartment.available_from && (
                 <div className="mb-4">
-                  <h4 className="font-medium text-primary-300 mb-1">Available From</h4>
+                  <h4 className="font-medium text-primary-300 mb-1">Laga bilaabo</h4>
                   <p className="text-night-200">
                     {new Date(apartment.available_from).toLocaleDateString()}
                   </p>
@@ -734,15 +734,15 @@ export default function ApartmentDetail() {
               {/* Lease Length */}
               {apartment.min_lease_months && (
                 <div className="mb-4">
-                  <h4 className="font-medium text-primary-300 mb-1">Minimum Lease</h4>
-                  <p className="text-night-200">{apartment.min_lease_months} months</p>
+                  <h4 className="font-medium text-primary-300 mb-1">Kireynta ugu yar</h4>
+                  <p className="text-night-200">{apartment.min_lease_months} bilood</p>
                 </div>
               )}
               
               {/* Property Type */}
               {apartment.property_type && (
                 <div className="mb-4">
-                  <h4 className="font-medium text-primary-300 mb-1">Property Type</h4>
+                  <h4 className="font-medium text-primary-300 mb-1">Nooca Guriga</h4>
                   <p className="text-night-200">{apartment.property_type}</p>
                 </div>
               )}
@@ -750,7 +750,7 @@ export default function ApartmentDetail() {
               {/* Deposit */}
               {apartment.deposit_amount && (
                 <div>
-                  <h4 className="font-medium text-primary-300 mb-1">Security Deposit</h4>
+                  <h4 className="font-medium text-primary-300 mb-1">Damaanad Celinta</h4>
                   <p className="text-night-200">
                     {new Intl.NumberFormat('en-US', {
                       style: 'currency',

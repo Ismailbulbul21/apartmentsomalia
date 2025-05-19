@@ -741,6 +741,7 @@ export function AuthProvider({ children }) {
       if (user?.id) {
         try {
           console.log('Manually refreshing profile for user:', user.id);
+          console.log('Current userProfile state:', userProfile);
           
           // Check if we recently refreshed to prevent infinite loops
           const now = Date.now();

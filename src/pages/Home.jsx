@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, memo, Suspense, lazy } from 'react';
+import { useState, useEffect, useCallback, memo, Suspense, lazy, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../lib/supabase';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
@@ -81,12 +81,35 @@ const LazyImage = memo(({ src, alt, className }) => {
 
 // Apartment card component
 const ApartmentCard = memo(({ apartment }) => {
-  // Find the primary image, or use the first one
-  const primaryImage = apartment.apartment_images && apartment.apartment_images.find(img => img.is_primary);
-  const imageToShow = primaryImage || 
-                    (apartment.apartment_images && apartment.apartment_images.length > 0 
-                      ? apartment.apartment_images[0] 
-                      : { storage_path: '/images/placeholder-apartment.svg' });
+  if (!apartment) {
+    console.error('Apartment is null or undefined in ApartmentCard');
+    return null;
+  }
+  
+  // Check if apartment_images exists and is valid before trying to access it 
+  let primaryImage = null;
+  try {
+    primaryImage = apartment.apartment_images && 
+                 Array.isArray(apartment.apartment_images) && 
+                 apartment.apartment_images.find(img => img && img.is_primary);
+  } catch (err) {
+    console.error('Error finding primary image:', err);
+  }
+  
+  // Safer image selection with fallbacks
+  let imageToShow = { storage_path: '/images/placeholder-apartment.svg' };
+  try {
+    if (primaryImage) {
+      imageToShow = primaryImage;
+    } else if (apartment.apartment_images && 
+              Array.isArray(apartment.apartment_images) && 
+              apartment.apartment_images.length > 0 && 
+              apartment.apartment_images[0]) {
+      imageToShow = apartment.apartment_images[0];
+    }
+  } catch (err) {
+    console.error('Error determining image to show:', err);
+  }
   
   return (
     <motion.div 
@@ -209,6 +232,9 @@ export default function Home() {
       setLoading(true);
       setError(null);
       
+      // Reset apartments to prevent stale data display
+      setApartments([]);
+      
       // Build filters object for debugging
       const filters = {
         minPrice,
@@ -218,7 +244,11 @@ export default function Home() {
         selectedDistrict
       };
       
+      console.log('Fetching apartments with filters:', filters);
+      
       // First, fetch apartments with their images
+      console.log('Starting apartment fetch...');
+      
       let query = supabase
         .from('apartments')
         .select(`
@@ -227,6 +257,15 @@ export default function Home() {
         `)
         .eq('status', 'approved')
         .eq('is_available', true);
+        
+      // More detailed logging
+      console.log('Query built:', {
+        table: 'apartments',
+        filters: {
+          status: 'approved',
+          is_available: true
+        }
+      });
       
       // Apply filters if they exist
       if (minPrice) {
@@ -250,48 +289,120 @@ export default function Home() {
       }
       
       // Execute the query
-      const { data, error } = await query.order('created_at', { ascending: false });
+      console.log('Executing apartments query...');
       
-      if (error) throw error;
+      let queryData = null;  // Declare variable outside try block to make it accessible throughout the function
+      
+      try {
+        const { data, error } = await query.order('created_at', { ascending: false });
+        queryData = data;  // Save data to our outer variable
+        
+        // Log the results for debugging
+        console.log('Apartments query result:', { 
+          success: !error,
+          dataReceived: data ? 'yes' : 'no', 
+          count: data?.length || 0,
+          error: error ? {
+            message: error.message,
+            details: error.details,
+            hint: error.hint,
+            code: error.code
+          } : null
+        });
+        
+        if (error) throw error;
+        
+        // Log first apartment data for debugging if available
+        if (data && data.length > 0) {
+          console.log('Sample apartment data:', {
+            id: data[0].id,
+            title: data[0].title,
+            hasImages: (data[0].apartment_images && data[0].apartment_images.length > 0) ? 'yes' : 'no',
+            imageCount: data[0].apartment_images?.length || 0
+          });
+        }
+      } catch (queryError) {
+        console.error('Error executing query:', queryError);
+        throw queryError;
+      }
       
       // If we have apartments, fetch the owner profiles separately
-      if (data && data.length > 0) {
-        // Get all unique owner IDs
-        const ownerIds = [...new Set(data.map(apt => apt.owner_id))];
+      if (queryData && queryData.length > 0) {
+        console.log(`Processing ${queryData.length} apartments...`);
         
-        // Fetch profiles for all owners
-        const { data: profilesData, error: profilesError } = await supabase
-          .from('profiles')
-          .select('id, full_name, whatsapp_number')
-          .in('id', ownerIds);
+        try {
+          // Get all unique owner IDs
+          const ownerIds = [...new Set(queryData.map(apt => apt.owner_id))];
           
-        if (!profilesError && profilesData) {
-          // Create a map of owner_id to profile data
-          const ownerMap = profilesData.reduce((map, profile) => {
-            map[profile.id] = profile;
-            return map;
-          }, {});
-          
-          // Enrich apartment data with owner profile info
-          const enrichedData = data.map(apt => ({
-            ...apt,
-            owner: ownerMap[apt.owner_id] || null
-          }));
-          
-          setApartments(enrichedData);
-        } else {
-          // If unable to fetch profiles, still show apartments
-          setApartments(data);
+          // Fetch profiles for all owners
+          const { data: profilesData, error: profilesError } = await supabase
+            .from('profiles')
+            .select('id, full_name, whatsapp_number')
+            .in('id', ownerIds);
+            
+          if (!profilesError && profilesData) {
+            console.log(`Found ${profilesData.length} owner profiles`);
+            
+            // Create a map of owner_id to profile data
+            const ownerMap = profilesData.reduce((map, profile) => {
+              map[profile.id] = profile;
+              return map;
+            }, {});
+            
+            // Enrich apartment data with owner profile info
+            const enrichedData = queryData.map(apt => ({
+              ...apt,
+              owner: ownerMap[apt.owner_id] || null
+            }));
+            
+            // Update state with the enriched data and clear loading/error states
+            setApartments(enrichedData);
+            setLoading(false);
+            setError(null);
+          } else {
+            // If unable to fetch profiles, still show apartments
+            console.log('Could not fetch owner profiles, showing apartments without owner data');
+            setApartments(queryData);
+            setLoading(false);
+            setError(null);
+          }
+        } catch (profileError) {
+          console.error('Error fetching owner profiles:', profileError);
+          // If owner profiles fetch fails, still show apartments
+          setApartments(queryData);
+          setLoading(false);
+          setError(null);
         }
       } else {
-        setApartments(data || []);
+        // No apartments or queryData is null
+        console.log('No apartments found in query result');
+        setApartments([]);
       }
     } catch (error) {
       console.error('Error fetching apartments:', error);
       setError('Failed to load apartments. Please try again later.');
+      
+      // Still set apartments to empty array in case of error
+      setApartments([]);
+      
+      // Try to handle common error cases
+      if (error?.code === "PGRST116") {
+        console.log("Foreign key violation or invalid query parameters");
+      } else if (error?.message?.includes('JWT')) {
+        console.log("Authentication error, token may have expired");
+      }
     } finally {
+      // Make sure loading state is cleared
       setLoading(false);
+      
+      // Clear any stale error messages if we have apartments
+      if (apartments.length > 0) {
+        setError(null);
+      }
     }
+    
+    // We no longer need this timeout since we're handling loading state properly
+    // in the try/catch/finally blocks
   }, [minPrice, maxPrice, minRooms, isFurnished, selectedDistrict]);
 
   // Fetch apartments on component mount and when filters change
@@ -316,11 +427,39 @@ export default function Home() {
     setMinRooms('');
     setIsFurnished('');
     setSelectedDistrict('');
+    
+    // If we're already in the apartments section, scroll to it
+    // to show the reset results
+    if (apartmentsSectionRef.current) {
+      apartmentsSectionRef.current.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start'
+      });
+    }
+    
+    // Set loading to true temporarily to show the loading indicator
+    setLoading(true);
   };
 
+  // Create a ref for the apartments section
+  const apartmentsSectionRef = useRef(null);
+  
   const handleDistrictChange = (district) => {
     setSelectedDistrict(district);
-    // Don't call fetchApartments here as the useEffect will handle it
+    // Set apartment loading state to true to show loading spinner
+    setLoading(true);
+    
+    // The useEffect will handle fetching apartments
+    
+    // After a small delay to allow state to update, scroll to the apartments section
+    setTimeout(() => {
+      if (apartmentsSectionRef.current) {
+        apartmentsSectionRef.current.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start'
+        });
+      }
+    }, 100);
   };
 
   return (
@@ -388,16 +527,36 @@ export default function Home() {
                   
                   {/* Mobile dropdown */}
                   <div className="block md:hidden">
-                    <select
-                      value={selectedDistrict}
-                      onChange={(e) => handleDistrictChange(e.target.value)}
-                      className="w-full bg-night-800 border border-night-600 text-white rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    >
-                      <option value="">All Districts</option>
-                      {districts.map(district => (
-                        <option key={district} value={district}>{district}</option>
-                      ))}
-                    </select>
+                    <div className="relative">
+                      <select
+                        value={selectedDistrict}
+                        onChange={(e) => handleDistrictChange(e.target.value)}
+                        className="w-full bg-night-800 border border-night-600 text-white rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary-500 appearance-none"
+                      >
+                        <option value="">All Districts</option>
+                        {districts.map(district => (
+                          <option key={district} value={district}>{district}</option>
+                        ))}
+                      </select>
+                      <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-primary-500">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </div>
+                    </div>
+                    {selectedDistrict && (
+                      <div className="mt-3 flex justify-center">
+                        <button
+                          onClick={resetFilters}
+                          className="flex items-center space-x-1 text-xs text-primary-400 bg-night-700 px-2.5 py-1.5 rounded-full"
+                        >
+                          <span>Clear "{selectedDistrict}" filter</span>
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    )}
                   </div>
                   
                   {/* District chips for desktop */}
@@ -426,6 +585,17 @@ export default function Home() {
                         }`}
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
+                        animate={selectedDistrict === district ? 
+                          { 
+                            y: [0, -5, 0],
+                            boxShadow: "0 10px 25px -5px rgba(59, 130, 246, 0.4)"
+                          } : 
+                          {}
+                        }
+                        transition={selectedDistrict === district ? 
+                          { duration: 0.5, ease: "easeOut" } : 
+                          { duration: 0.3 }
+                        }
                       >
                         <span className="text-sm font-medium">{district}</span>
                       </motion.div>
@@ -444,6 +614,17 @@ export default function Home() {
                         }`}
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
+                        animate={selectedDistrict === district ? 
+                          { 
+                            y: [0, -5, 0],
+                            boxShadow: "0 10px 25px -5px rgba(59, 130, 246, 0.4)"
+                          } : 
+                          {}
+                        }
+                        transition={selectedDistrict === district ? 
+                          { duration: 0.5, ease: "easeOut" } : 
+                          { duration: 0.3 }
+                        }
                       >
                         <span className="text-sm font-medium">{district}</span>
                       </motion.div>
@@ -516,12 +697,36 @@ export default function Home() {
       </section>
       
       {/* Apartments Section */}
-      <section className="bg-gradient-to-b from-night-950 to-night-900 py-10 md:py-16">
+      <section ref={apartmentsSectionRef} className="bg-gradient-to-b from-night-950 to-night-900 py-10 md:py-16">
         <div className="container mx-auto px-4">
           <div className="mb-8">
-            <h2 className="text-3xl font-bold text-white mb-2">
-              {selectedDistrict ? `Apartments in ${selectedDistrict}` : 'Available Apartments'}
-            </h2>
+            <div className="flex flex-wrap items-center justify-between">
+              <h2 className="text-3xl font-bold text-white mb-2">
+                {selectedDistrict ? `Apartments in ${selectedDistrict}` : 'Available Apartments'}
+              </h2>
+              
+              {selectedDistrict && (
+                <button 
+                  onClick={resetFilters}
+                  className="flex items-center bg-primary-600 text-white px-3 py-1.5 rounded-lg text-sm hover:bg-primary-700 transition-colors"
+                >
+                  <span>Clear filter</span>
+                  <svg className="w-4 h-4 ml-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+            </div>
+            
+            {selectedDistrict && (
+              <div className="mt-2 flex items-center text-primary-300">
+                <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span className="text-sm">Showing filtered results</span>
+              </div>
+            )}
           </div>
           
           {loading ? (
@@ -548,9 +753,21 @@ export default function Home() {
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {apartments.map((apartment) => (
-                <ApartmentCard key={apartment.id} apartment={apartment} />
-              ))}
+              {Array.isArray(apartments) && apartments.length > 0 ? (
+                apartments.map((apartment) => (
+                  apartment ? <ApartmentCard key={apartment.id || Math.random()} apartment={apartment} /> : null
+                ))
+              ) : (
+                <div className="col-span-4 text-center py-12">
+                  <p className="text-night-300">No apartments available.</p>
+                  <button
+                    onClick={resetFilters}
+                    className="mt-4 bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg"
+                  >
+                    Reset Filters
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -645,4 +862,4 @@ export default function Home() {
       </section>
     </div>
   );
-} 
+}
