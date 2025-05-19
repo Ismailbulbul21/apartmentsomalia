@@ -45,6 +45,7 @@ const MessagesButton = memo(({ user }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [conversations, setConversations] = useState([]);
   const [loading, setLoading] = useState(false);
+  const dropdownRef = useRef(null);
   
   // If user is not available, don't render anything
   if (!user) return null;
@@ -71,6 +72,40 @@ const MessagesButton = memo(({ user }) => {
       clearMessageNotification();
     }
   }, [isOpen, user]);
+
+  // Position the dropdown in the viewport properly on mobile
+  useEffect(() => {
+    if (isOpen && dropdownRef.current) {
+      // Get viewport width
+      const viewportWidth = window.innerWidth;
+      const dropdown = dropdownRef.current;
+      
+      // Reset position first
+      dropdown.style.left = '';
+      dropdown.style.right = '0';
+      
+      // Get dropdown bounds
+      const rect = dropdown.getBoundingClientRect();
+      
+      // If dropdown is going outside the viewport on the left
+      if (rect.left < 0) {
+        dropdown.style.left = '0';
+        dropdown.style.right = 'auto';
+      }
+      
+      // If dropdown is going outside on the right
+      if (rect.right > viewportWidth) {
+        // Position from the left to keep it in viewport
+        dropdown.style.left = 'auto';
+        dropdown.style.right = '0';
+        
+        // If on very small screens, make it almost full width
+        if (viewportWidth < 400) {
+          dropdown.style.width = (viewportWidth - 20) + 'px';
+        }
+      }
+    }
+  }, [isOpen]);
   
   // Fetch recent conversations
   const fetchRecentConversations = async () => {
@@ -270,12 +305,13 @@ const MessagesButton = memo(({ user }) => {
       <AnimatePresence>
         {isOpen && (
           <motion.div 
-            className="absolute right-0 mt-2 w-[calc(100vw-32px)] sm:w-80 max-w-sm rounded-xl bg-gray-800 shadow-lg border border-gray-700 z-50"
+            ref={dropdownRef}
+            className="fixed md:absolute left-2 md:left-auto right-2 md:right-0 mt-2 w-[calc(100vw-16px)] md:w-80 max-w-sm rounded-xl bg-gray-800 shadow-lg border border-gray-700 z-50"
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: 0.15 }}
-            style={{ maxHeight: '80vh', overflowY: 'auto' }}
+            style={{ maxHeight: '80vh', overflowY: 'auto', top: "50px" }}
           >
             <div className="p-3 border-b border-gray-700 flex justify-between items-center sticky top-0 bg-gray-800 z-10">
               <h3 className="text-sm font-medium text-white">Messages</h3>
@@ -412,6 +448,37 @@ const ProfileButton = memo(({ user, userProfile, userRole, isAdminUser, isOwner,
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isOpen]);
+
+  // Position the dropdown in the viewport properly on mobile
+  useEffect(() => {
+    if (isOpen && dropdownRef.current) {
+      // Get viewport width
+      const viewportWidth = window.innerWidth;
+      const dropdown = dropdownRef.current.querySelector('.profile-dropdown-menu');
+      
+      if (dropdown) {
+        // Reset position first
+        dropdown.style.left = '';
+        dropdown.style.right = '0';
+        
+        // Get dropdown bounds
+        const rect = dropdown.getBoundingClientRect();
+        
+        // If dropdown is going outside the viewport on the left
+        if (rect.left < 0) {
+          dropdown.style.left = '0';
+          dropdown.style.right = 'auto';
+        }
+        
+        // If dropdown is going outside on the right
+        if (rect.right > viewportWidth) {
+          // Position from the left to keep it in viewport
+          dropdown.style.left = 'auto';
+          dropdown.style.right = '0';
+        }
+      }
+    }
+  }, [isOpen]);
   
   // For debugging
   useEffect(() => {
@@ -496,11 +563,12 @@ const ProfileButton = memo(({ user, userProfile, userRole, isAdminUser, isOwner,
       <AnimatePresence>
         {isOpen && (
           <motion.div 
-            className="absolute right-0 mt-2 w-48 rounded-xl bg-gray-800 shadow-lg border border-gray-700 z-50"
+            className="fixed md:absolute right-2 md:right-0 mt-2 w-[calc(100vw-16px)] md:w-48 rounded-xl bg-gray-800 shadow-lg border border-gray-700 z-50 profile-dropdown-menu"
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: 0.15 }}
+            style={{ maxWidth: "280px", top: "50px" }}
           >
             <div className="p-3 border-b border-gray-700">
               <p className="text-sm font-medium text-white truncate">{user?.email}</p>
