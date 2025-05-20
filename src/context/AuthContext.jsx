@@ -3,8 +3,8 @@ import { supabase, getProfileImageUrl } from '../lib/supabase';
 
 const AuthContext = createContext();
 
-// Get admin user ID from environment variable
-const ADMIN_USER_ID = import.meta.env.VITE_ADMIN_USER_ID || '8bc778e8-4990-4166-90d3-d667e55928e2';
+// Get admin user ID from environment variable only
+const ADMIN_USER_ID = import.meta.env.VITE_ADMIN_USER_ID;
 
 // Helper functions for localStorage
 const saveRoleToLocalStorage = (userId, role) => {
@@ -171,12 +171,12 @@ export function AuthProvider({ children }) {
         return cachedProfile;
       }
       
-      // Special case for known admin user
-      if (userId === ADMIN_USER_ID) {
-        console.log('Using hardcoded admin role for known admin user');
+      // Special case for known admin user (only if ADMIN_USER_ID env var is set)
+      if (ADMIN_USER_ID && userId === ADMIN_USER_ID) {
+        console.log('Admin user identified via environment variable');
         saveRoleToLocalStorage(userId, 'admin');
         
-        // Get actual profile data for admin user instead of hardcoded values
+        // Get actual profile data for admin user
         const { data: adminProfile, error: adminProfileError } = await supabase
           .from('profiles')
           .select('*')
@@ -186,8 +186,6 @@ export function AuthProvider({ children }) {
         if (!adminProfileError && adminProfile) {
           // Process avatar URL if present
           adminProfile.avatar_url = processAvatarUrl(adminProfile.avatar_url);
-          
-          console.log('Admin profile found:', adminProfile);
           
           // Add the role field
           const profileWithRole = {
@@ -201,17 +199,6 @@ export function AuthProvider({ children }) {
           // Return actual profile with admin role
           return profileWithRole;
         }
-        
-        // Fallback to hardcoded values if profile fetch fails
-        const fallbackProfile = { 
-          id: userId,
-          role: 'admin', 
-          full_name: 'Admin User',
-          avatar_url: null // Explicitly set null
-        };
-        
-        saveProfileToLocalStorage(userId, fallbackProfile);
-        return fallbackProfile;
       }
       
       let profileData = null;
