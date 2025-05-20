@@ -1,8 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
 
 // Use environment variables for Supabase credentials
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://evkttwkermhcyizywzpe.supabase.co';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV2a3R0d2tlcm1oY3lpenl3enBlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDc0MTMzOTAsImV4cCI6MjA2Mjk4OTM5MH0._Dksvs00hB1wr4IyMXAlNTkj3F7khSf1QBAAwurbt1g';
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+// This helps with debugging when environment variables are missing
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.error('Missing Supabase environment variables. Check your .env file or Vercel environment variables.');
+}
 
 // Cache configuration for better performance
 const supabaseOptions = {
