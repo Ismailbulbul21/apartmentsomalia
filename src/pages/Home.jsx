@@ -129,7 +129,7 @@ const ApartmentCard = memo(({ apartment }) => {
         </Link>
         <div className="absolute top-0 right-0 m-3">
           <span className="bg-primary-500 text-white text-xs font-bold px-2.5 py-1 rounded-md">
-            ${apartment.price_per_month}/mo
+            ${apartment.price_per_month}/bishii
           </span>
         </div>
         {apartment.district && (
@@ -166,21 +166,21 @@ const ApartmentCard = memo(({ apartment }) => {
                 <svg className="w-4 h-4 mr-1 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                 </svg>
-                <span>Furnished</span>
+                <span>Fadhiisan</span>
               </div>
             )}
           </div>
           
           {apartment.owner && apartment.owner.whatsapp_number && (
             <a 
-              href={`https://wa.me/${apartment.owner.whatsapp_number.replace(/\D/g, '')}?text=Hello, I'm interested in your apartment: ${apartment.title}`}
+              href={`https://wa.me/${apartment.owner.whatsapp_number.replace(/\D/g, '')}?text=Halo, Waan ku xiiseynayaa gurigaaga: ${apartment.title}`}
               target="_blank"
               rel="noopener noreferrer"
               className="text-green-400 hover:text-green-300 flex items-center"
               onClick={(e) => {
                 e.stopPropagation();
                 e.preventDefault();
-                window.open(`https://wa.me/${apartment.owner.whatsapp_number.replace(/\D/g, '')}?text=Hello, I'm interested in your apartment: ${apartment.title}`, '_blank');
+                window.open(`https://wa.me/${apartment.owner.whatsapp_number.replace(/\D/g, '')}?text=Halo, Waan ku xiiseynayaa gurigaaga: ${apartment.title}`, '_blank');
               }}
             >
               <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
@@ -471,7 +471,7 @@ export default function Home() {
           <div className="absolute inset-0 bg-gradient-to-b from-night-950/90 to-night-900/90 z-10"></div>
           <img 
             src="/images/mogadishu-cityscape.jpg" 
-            alt="Mogadishu Cityscape" 
+            alt="Muqdisho Muuqaal" 
             className="w-full h-full object-cover"
             onError={(e) => {
               e.target.onerror = null;
@@ -493,7 +493,7 @@ export default function Home() {
             className="max-w-4xl mx-auto text-center"
           >
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6 text-transparent bg-clip-text bg-gradient-to-r from-white via-primary-300 to-white">
-              Find Your Perfect Home in Mogadishu
+              Ka Hel Gurigaaga Ku Haboon Muqdisho
             </h1>
             
             {/* All-in-One Advanced Filter Panel */}
@@ -509,7 +509,7 @@ export default function Home() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <h2 className="text-xl font-semibold text-primary-300">
-                      {selectedDistrict ? `Browsing ${selectedDistrict} District` : 'Where would you like to live?'}
+                      {selectedDistrict ? `Fiiri Degmada ${selectedDistrict}` : 'Xagee Baad Jeclaan Lahayd Inaad Ku Noolaato?'}
                     </h2>
                     {selectedDistrict && (
                       <button 
@@ -517,7 +517,7 @@ export default function Home() {
                         onClick={resetFilters}
                         className="text-sm text-primary-400 hover:text-primary-300 flex items-center space-x-1"
                       >
-                        <span>Clear all filters</span>
+                        <span>Tirtir Dhammaan Filtarrada</span>
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                         </svg>
@@ -533,7 +533,7 @@ export default function Home() {
                         onChange={(e) => handleDistrictChange(e.target.value)}
                         className="w-full bg-night-800 border border-night-600 text-white rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary-500 appearance-none"
                       >
-                        <option value="">All Districts</option>
+                        <option value="">Dhammaan Degmooyinka</option>
                         {districts.map(district => (
                           <option key={district} value={district}>{district}</option>
                         ))}
@@ -550,7 +550,7 @@ export default function Home() {
                           onClick={resetFilters}
                           className="flex items-center space-x-1 text-xs text-primary-400 bg-night-700 px-2.5 py-1.5 rounded-full"
                         >
-                          <span>Clear "{selectedDistrict}" filter</span>
+                          <span>Tirtir filtarka "{selectedDistrict}"</span>
                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                           </svg>
@@ -571,7 +571,7 @@ export default function Home() {
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
                     >
-                      <span className="text-sm font-medium">All</span>
+                      <span className="text-sm font-medium">Dhamaan</span>
                     </motion.div>
                     
                     {districts.slice(0, 7).map(district => (
@@ -635,48 +635,48 @@ export default function Home() {
                 {/* Advanced filters */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div>
-                    <label className="block text-xs text-gray-400 mb-1">Min Price ($)</label>
+                    <label className="block text-xs text-gray-400 mb-1">Qiimaha Ugu Yar ($)</label>
                     <input
                       type="number"
                       value={minPrice}
                       onChange={(e) => setMinPrice(e.target.value)}
-                      placeholder="Min price"
+                      placeholder="Qiimaha ugu yar"
                       className="w-full bg-night-800 border border-night-600 rounded-lg px-3 py-2 text-white text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500 focus:outline-none"
                     />
                   </div>
                   
                   <div>
-                    <label className="block text-xs text-gray-400 mb-1">Max Price ($)</label>
+                    <label className="block text-xs text-gray-400 mb-1">Qiimaha Ugu Badan ($)</label>
                     <input
                       type="number"
                       value={maxPrice}
                       onChange={(e) => setMaxPrice(e.target.value)}
-                      placeholder="Max price"
+                      placeholder="Qiimaha ugu badan"
                       className="w-full bg-night-800 border border-night-600 rounded-lg px-3 py-2 text-white text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500 focus:outline-none"
                     />
                   </div>
                   
                   <div>
-                    <label className="block text-xs text-gray-400 mb-1">Bedrooms</label>
+                    <label className="block text-xs text-gray-400 mb-1">Qolalka Jiifka</label>
                     <input
                       type="number"
                       value={minRooms}
                       onChange={(e) => setMinRooms(e.target.value)}
-                      placeholder="Min bedrooms"
+                      placeholder="Tirada ugu yar"
                       className="w-full bg-night-800 border border-night-600 rounded-lg px-3 py-2 text-white text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500 focus:outline-none"
                     />
                   </div>
                   
                   <div>
-                    <label className="block text-xs text-gray-400 mb-1">Furnished</label>
+                    <label className="block text-xs text-gray-400 mb-1">Alaab Guriga</label>
                     <select
                       value={isFurnished}
                       onChange={(e) => setIsFurnished(e.target.value)}
                       className="w-full bg-night-800 border border-night-600 rounded-lg px-3 py-2 text-white text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500 focus:outline-none"
                     >
-                      <option value="">Any</option>
-                      <option value="true">Yes</option>
-                      <option value="false">No</option>
+                      <option value="">Kuu Wada</option>
+                      <option value="true">Haa</option>
+                      <option value="false">Maya</option>
                     </select>
                   </div>
                 </div>
@@ -688,7 +688,7 @@ export default function Home() {
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                   </svg>
-                  <span>Search Apartments</span>
+                  <span>Raadi Guryaha</span>
                 </button>
               </form>
             </motion.div>
@@ -702,7 +702,7 @@ export default function Home() {
           <div className="mb-8">
             <div className="flex flex-wrap items-center justify-between">
               <h2 className="text-3xl font-bold text-white mb-2">
-                {selectedDistrict ? `Apartments in ${selectedDistrict}` : 'Available Apartments'}
+                {selectedDistrict ? `Guryaha ${selectedDistrict}` : 'Guryaha La Heli Karo'}
               </h2>
               
               {selectedDistrict && (
@@ -710,7 +710,7 @@ export default function Home() {
                   onClick={resetFilters}
                   className="flex items-center bg-primary-600 text-white px-3 py-1.5 rounded-lg text-sm hover:bg-primary-700 transition-colors"
                 >
-                  <span>Clear filter</span>
+                  <span>Tirtir filtarka</span>
                   <svg className="w-4 h-4 ml-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
@@ -724,7 +724,7 @@ export default function Home() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
-                <span className="text-sm">Showing filtered results</span>
+                <span className="text-sm">Itus natiijadaha la shaandheeyay</span>
               </div>
             )}
           </div>
@@ -742,13 +742,13 @@ export default function Home() {
               <svg className="w-16 h-16 text-night-600 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
               </svg>
-              <h3 className="text-xl text-white mb-2">No apartments found</h3>
-              <p className="text-night-300">Try adjusting your filters or check back later.</p>
+              <h3 className="text-xl text-white mb-2">Guryo lama helin</h3>
+              <p className="text-night-300">Isku day inaad wax ka beddesho filtarada ama dib u fiiri mar dambe.</p>
               <button
                 onClick={resetFilters}
                 className="mt-4 bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg"
               >
-                Reset Filters
+                Dib u Celi Filtarrada
               </button>
             </div>
           ) : (
@@ -759,12 +759,12 @@ export default function Home() {
                 ))
               ) : (
                 <div className="col-span-4 text-center py-12">
-                  <p className="text-night-300">No apartments available.</p>
+                  <p className="text-night-300">Ma jiraan guryo la heli karo.</p>
                   <button
                     onClick={resetFilters}
                     className="mt-4 bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg"
                   >
-                    Reset Filters
+                    Dib u Celi Filtarrada
                   </button>
                 </div>
               )}
@@ -777,9 +777,9 @@ export default function Home() {
       <section className="bg-night-950 py-20">
         <div className="container mx-auto px-4">
           <div className="text-center mb-16">
-            <h2 className="text-3xl font-bold text-white mb-4">Living Reimagined</h2>
+            <h2 className="text-3xl font-bold text-white mb-4">Nolol Cusub oo La Qaabeeyay</h2>
             <p className="text-night-300 max-w-2xl mx-auto">
-              Our modern apartments are designed with your lifestyle in mind, offering premium amenities and thoughtful details.
+              Guryaheena casriga ah waxaa loogu talagalay hab-nololeedkaaga, iyagoo bixiya adeegyo heer sare ah iyo faahfaahino si taxadar leh loo sameeyey.
             </p>
           </div>
           
@@ -794,9 +794,9 @@ export default function Home() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
               </div>
-              <h3 className="text-xl font-bold text-white mb-2">Smart Home Technology</h3>
+              <h3 className="text-xl font-bold text-white mb-2">Tignoolajiyada Guryaha Casriga ah</h3>
               <p className="text-night-300">
-                Control lighting, climate, and security from your smartphone with integrated smart home features.
+                Ka xakamee iftiinka, cimilada, iyo amniga telefoonkaaga casriga ah adigoo isticmaalaya astaamaha guryaha casriga ah ee la isku dhafay.
               </p>
             </motion.div>
             
@@ -810,9 +810,9 @@ export default function Home() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
                 </svg>
               </div>
-              <h3 className="text-xl font-bold text-white mb-2">Premium Locations</h3>
+              <h3 className="text-xl font-bold text-white mb-2">Goobaha Ugu Fiican</h3>
               <p className="text-night-300">
-                Located in the most desirable neighborhoods with convenient access to transportation and amenities.
+                Ku yaalla xaafadaha ugu roonaan iyadoo si fudud looga heli karo gaadiidka iyo adeegyada.
               </p>
             </motion.div>
             
@@ -826,9 +826,9 @@ export default function Home() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
                 </svg>
               </div>
-              <h3 className="text-xl font-bold text-white mb-2">Modern Design</h3>
+              <h3 className="text-xl font-bold text-white mb-2">Naqshadeyn Casri ah</h3>
               <p className="text-night-300">
-                Contemporary finishes, spacious open layouts, and thoughtfully designed living spaces.
+                Dhismayaal casri ah, qolal ballaaran oo furan, iyo meelo nololeed si taxadar leh loo naqshadeeyay.
               </p>
             </motion.div>
           </div>
@@ -839,22 +839,22 @@ export default function Home() {
       <section className="relative bg-night-900 py-20">
         <div className="container mx-auto px-4">
           <div className="max-w-3xl mx-auto text-center">
-            <h2 className="text-3xl font-bold text-white mb-6">Ready to find your perfect apartment?</h2>
+            <h2 className="text-3xl font-bold text-white mb-6">Ma diyaar u tahay inaad hesho gurigaaga ku haboon?</h2>
             <p className="text-night-300 text-lg mb-8">
-              Join thousands of satisfied residents who've found their ideal home with us.
+              Ku biir kumanaan qof oo ku qanacsan oo helay guryahooda ku haboon annaga.
             </p>
             <div className="flex flex-col sm:flex-row justify-center gap-4">
               <Link 
                 to="/signup" 
                 className="bg-primary-500 hover:bg-primary-600 text-white text-lg px-8 py-3 rounded-lg shadow-lg transition-all duration-300 inline-block"
               >
-                Get Started Today
+                Ku Bilow Maanta
               </Link>
               <Link 
                 to="/contact" 
                 className="bg-night-800 hover:bg-night-700 text-white text-lg px-8 py-3 rounded-lg shadow-lg transition-all duration-300 border border-night-600"
               >
-                Contact Us
+                Nala Soo Xiriir
               </Link>
             </div>
           </div>
