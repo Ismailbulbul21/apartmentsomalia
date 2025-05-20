@@ -4,6 +4,13 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
+// Debug log to see if environment variables are loaded correctly
+console.log('DEBUG ENV VARS:', { 
+  supabaseUrl: supabaseUrl ? 'URL exists (not shown for security)' : 'Missing URL', 
+  supabaseAnonKey: supabaseAnonKey ? 'Key exists (not shown for security)' : 'Missing key',
+  allEnvVars: import.meta.env 
+});
+
 // This helps with debugging when environment variables are missing
 if (!supabaseUrl || !supabaseAnonKey) {
   console.error('Missing Supabase environment variables. Check your .env file or Vercel environment variables.');

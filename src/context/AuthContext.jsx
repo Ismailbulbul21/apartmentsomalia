@@ -62,7 +62,35 @@ const getProfileFromLocalStorage = (userId) => {
   if (!userId) return null;
   try {
     const profileData = localStorage.getItem(`user_profile_${userId}`);
-    return profileData ? JSON.parse(profileData) : null;
+    
+    // If no data found, return null
+    if (!profileData) return null;
+    
+    // Try to parse the data
+    try {
+      const parsedData = JSON.parse(profileData);
+      
+      // Validate that the parsed data is a valid profile object
+      if (!parsedData || typeof parsedData !== 'object' || !parsedData.id) {
+        console.warn('Invalid profile data in localStorage, clearing it');
+        localStorage.removeItem(`user_profile_${userId}`);
+        return null;
+      }
+      
+      // Check if the profile data is for the correct user
+      if (parsedData.id !== userId) {
+        console.warn('Profile data mismatch, clearing it');
+        localStorage.removeItem(`user_profile_${userId}`);
+        return null;
+      }
+      
+      return parsedData;
+    } catch (parseError) {
+      console.warn('Failed to parse profile data from localStorage:', parseError);
+      // Clear invalid data
+      localStorage.removeItem(`user_profile_${userId}`);
+      return null;
+    }
   } catch (e) {
     console.warn('Could not read profile from localStorage:', e);
     return null;
@@ -143,7 +171,9 @@ export function AuthProvider({ children }) {
   };
 
   // Function to fetch user profile and role
-  const fetchUserProfile = async (userId) => {
+  const fetchUserProfile = async (userId, retryAttempt = 0) => {
+    const maxRetries = 2; // Maximum number of retry attempts
+    
     try {
       console.log('Fetching profile for user:', userId);
       
@@ -201,105 +231,129 @@ export function AuthProvider({ children }) {
         }
       }
       
-      let profileData = null;
+      // For normal users, fetch profile and determine role
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
       
-      // Try RPC call first
-      try {
-        const { data: directProfile, error: directError } = await supabase.rpc('get_user_profile', {
-          user_id: userId
-        });
+      if (profileError) {
+        console.error('Error fetching profile:', profileError);
         
-        if (!directError && directProfile && directProfile.length > 0) {
-          // Extract the first item from the array
-          profileData = directProfile[0];
-        } else {
-          console.log('RPC call failed or returned no data, falling back to direct query');
+        // Retry logic for transient errors
+        if (retryAttempt < maxRetries) {
+          console.log(`Retrying profile fetch (${retryAttempt + 1}/${maxRetries})...`);
+          // Exponential backoff: 1s, 2s, 4s, etc.
+          const delay = Math.pow(2, retryAttempt) * 1000;
+          await new Promise(resolve => setTimeout(resolve, delay));
+          return fetchUserProfile(userId, retryAttempt + 1);
         }
-      } catch (rpcErr) {
-        console.error('RPC error:', rpcErr);
+        
+        // If we have a cached profile, use it as fallback after all retries
+        if (cachedProfile) {
+          console.log('Using cached profile as fallback after fetch error');
+          setUserProfile(cachedProfile);
+          setUserRoleWithPersistence(userId, cachedProfile.role || 'user');
+          return cachedProfile;
+        }
+        
+        throw profileError;
       }
       
-      // If RPC failed, try direct database query as fallback
-      if (!profileData) {
-        console.log('Fetching profile directly from database');
-        const { data: directData, error: directError } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', userId)
-          .single();
-          
-        if (!directError && directData) {
-          // For direct query, we need to determine role separately
-          let role = 'user';
-          
-          // Check if user is an owner
-          const { data: ownerData } = await supabase
-            .from('owner_requests')
-            .select('status')
-            .eq('user_id', userId)
-            .eq('status', 'approved')
-            .maybeSingle();
-            
-          if (ownerData) {
-            role = 'owner';
-          }
-          
-          profileData = {
-            ...directData,
-            role
-          };
-        }
-      }
-      
-      // Process the profile data
       if (profileData) {
-        // Process avatar URL if present
+        // Get avatar URL if present
         profileData.avatar_url = processAvatarUrl(profileData.avatar_url);
         
-        // Save to localStorage for future use
-        if (profileData.role) {
-          saveRoleToLocalStorage(userId, profileData.role);
-          setUserRole(profileData.role);
+        // Determine user role
+        let role = 'user';
+        
+        // Admin check via env var
+        if (userId === ADMIN_USER_ID) {
+          role = 'admin';
+        } else {
+          // Check if user is an owner via owner_requests table
+          try {
+            const { data: ownerData } = await supabase
+              .from('owner_requests')
+              .select('status')
+              .eq('user_id', userId)
+              .eq('status', 'approved')
+              .maybeSingle();
+              
+            if (ownerData) {
+              role = 'owner';
+            }
+          } catch (ownerCheckError) {
+            console.error('Error checking owner status:', ownerCheckError);
+            // If we can't check owner status, default to cached role or 'user'
+            role = cachedRole || 'user';
+          }
         }
         
-        // Save the complete profile to localStorage
-        saveProfileToLocalStorage(userId, profileData);
+        // Set profile with role
+        const profileWithRole = {
+          ...profileData,
+          role
+        };
         
-        console.log('Profile data loaded successfully:', profileData);
-        return profileData;
-      }
-      
-      // Default fallback
-      if (cachedRole) {
-        const defaultProfile = { id: userId, role: cachedRole, full_name: 'User', avatar_url: null };
-        saveProfileToLocalStorage(userId, defaultProfile);
+        // Save to localStorage for next time
+        saveProfileToLocalStorage(userId, profileWithRole);
+        
+        return profileWithRole;
+      } else {
+        // No profile found, but we have a user ID, so create a default profile
+        console.log('No profile found for user, creating default');
+        const defaultProfile = {
+          id: userId,
+          role: cachedRole || 'user',
+          created_at: new Date().toISOString()
+        };
+        
+        // Return the default profile
         return defaultProfile;
       }
+    } catch (error) {
+      console.error('Error in fetchUserProfile:', error);
       
-      const userProfile = { id: userId, role: 'user', full_name: 'Default User', avatar_url: null };
-      saveProfileToLocalStorage(userId, userProfile);
-      return userProfile;
-    } catch (err) {
-      console.error('Profile fetch error:', err);
-      
-      // Try localStorage as fallback in case of error
-      const cachedRole = getRoleFromLocalStorage(userId);
-      if (cachedRole) {
-        const fallbackProfile = { id: userId, role: cachedRole, full_name: 'User', avatar_url: null };
-        saveProfileToLocalStorage(userId, fallbackProfile);
-        return fallbackProfile;
+      // Retry logic for unexpected errors
+      if (retryAttempt < maxRetries) {
+        console.log(`Retrying profile fetch after error (${retryAttempt + 1}/${maxRetries})...`);
+        const delay = Math.pow(2, retryAttempt) * 1000;
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return fetchUserProfile(userId, retryAttempt + 1);
       }
       
-      // Default to user role as failsafe
-      const defaultProfile = { id: userId, role: 'user', full_name: 'Default User', avatar_url: null };
-      saveProfileToLocalStorage(userId, defaultProfile);
-      return defaultProfile;
+      // If we reached max retries, return a minimal profile to prevent UI errors
+      return { 
+        id: userId, 
+        role: cachedRole || 'user',
+        error: error.message 
+      };
     }
   };
 
   // Background refresh profile without affecting UI state
   const refreshProfileInBackground = async (userId) => {
+    if (!userId) return;
+    
     try {
+      console.log('Background refresh of profile for:', userId);
+      
+      // Check when the profile was last refreshed to avoid too frequent updates
+      // Only refresh if it's been more than 30 seconds since last refresh
+      const lastRefreshKey = `last_profile_refresh_${userId}`;
+      const lastRefresh = parseInt(localStorage.getItem(lastRefreshKey) || '0');
+      const now = Date.now();
+      
+      if (now - lastRefresh < 30000) { // 30 seconds
+        console.log('Skipping background refresh, too recent');
+        return;
+      }
+      
+      // Mark the refresh time before starting the actual refresh
+      localStorage.setItem(lastRefreshKey, now.toString());
+      
       // Fetch most up-to-date profile directly
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
@@ -308,6 +362,7 @@ export function AuthProvider({ children }) {
         .single();
         
       if (profileError) {
+        console.warn('Background profile refresh error:', profileError);
         return;
       }
       
@@ -324,15 +379,24 @@ export function AuthProvider({ children }) {
           role = 'admin';
         } else {
           // Check if user is an owner
-          const { data: ownerData } = await supabase
-            .from('owner_requests')
-            .select('status')
-            .eq('user_id', userId)
-            .eq('status', 'approved')
-            .maybeSingle();
-            
-          if (ownerData) {
-            role = 'owner';
+          try {
+            const { data: ownerData } = await supabase
+              .from('owner_requests')
+              .select('status')
+              .eq('user_id', userId)
+              .eq('status', 'approved')
+              .maybeSingle();
+              
+            if (ownerData) {
+              role = 'owner';
+            }
+          } catch (ownerError) {
+            console.warn('Error checking owner status in background:', ownerError);
+            // Keep existing role on error
+            const existingRole = getRoleFromLocalStorage(userId);
+            if (existingRole) {
+              role = existingRole;
+            }
           }
         }
         
@@ -344,22 +408,49 @@ export function AuthProvider({ children }) {
         
         // Update localStorage cache
         saveProfileToLocalStorage(userId, fullProfile);
+        
+        // Check if user state is still the same user
+        // This prevents updating state for a user who has logged out/changed
+        if (user?.id === userId) {
+          // Silently update the role if it changed
+          if (role !== userRole) {
+            setUserRoleWithPersistence(userId, role);
+          }
+          
+          // Update the profile state if needed
+          setUserProfile(prevProfile => {
+            // Only update if meaningful changes
+            if (JSON.stringify(prevProfile) !== JSON.stringify(fullProfile)) {
+              return fullProfile;
+            }
+            return prevProfile;
+          });
+        }
       }
     } catch (error) {
-      console.error('Background profile refresh error:', error);
+      console.warn('Background profile refresh error:', error);
+      // No UI update on error in background refresh
     }
   };
 
   // Initialize auth state
   useEffect(() => {
     let authTimeout;
+    let retryCount = 0;
+    const maxRetries = 3;
     
     const initializeAuth = async () => {
       try {
         setLoading(true);
         
-        // Set a timeout to ensure loading state doesn't get stuck - reduce from 5s to 3s
+        // Clear any existing timeout
+        if (authTimeout) {
+          clearTimeout(authTimeout);
+        }
+        
+        // Set a timeout to ensure loading state doesn't get stuck - increased from 3s to 5s
         authTimeout = setTimeout(() => {
+          console.log('Auth initialization timeout reached');
           setLoading(false);
           setAuthInitialized(true);
           
@@ -367,33 +458,76 @@ export function AuthProvider({ children }) {
           if (user?.id === ADMIN_USER_ID) {
             setUserRole('admin');
           }
-        }, 3000);
+        }, 5000);
+        
+        // Clean up any stale cached data before initializing
+        try {
+          // Get all localStorage keys
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            
+            // Find profile/role data older than 24 hours (86400000 ms)
+            if (key && (key.startsWith('profile_fetch_time_'))) {
+              const timestamp = parseInt(localStorage.getItem(key)) || 0;
+              if (Date.now() - timestamp > 86400000) {
+                const userId = key.replace('profile_fetch_time_', '');
+                console.log('Clearing stale data for user:', userId);
+                localStorage.removeItem(`user_profile_${userId}`);
+                localStorage.removeItem(`user_role_${userId}`);
+                localStorage.removeItem(key);
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('Error cleaning stale cache:', e);
+        }
         
         // Get current session
-        const { data: { session } } = await supabase.auth.getSession();
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        
+        if (sessionError) {
+          console.error('Session fetch error:', sessionError);
+          if (retryCount < maxRetries) {
+            retryCount++;
+            console.log(`Retrying auth initialization (${retryCount}/${maxRetries})...`);
+            
+            // Exponential backoff for retries
+            setTimeout(initializeAuth, 1000 * retryCount);
+            return;
+          }
+        }
         
         if (session?.user) {
           setUser(session.user);
           
-          // Try to get cached profile immediately
+          // Try to get cached profile immediately for fast UI rendering
           const cachedProfile = getProfileFromLocalStorage(session.user.id);
           if (cachedProfile) {
             setUserProfile(cachedProfile);
             setUserRoleWithPersistence(session.user.id, cachedProfile.role || 'user');
           }
           
-          // Fetch profile data (will use cache if available)
-          const profile = await fetchUserProfile(session.user.id);
-          
-          if (profile) {
-            setUserRoleWithPersistence(session.user.id, profile.role || 'user');
-            // Store the full profile data for access across components
-            setUserProfile(profile);
-            console.log('Initial profile data:', profile);
-          } else {
-            setUserRoleWithPersistence(session.user.id, 'user');
+          // Fetch fresh profile data (will use cache if available)
+          try {
+            const profile = await fetchUserProfile(session.user.id);
+            
+            if (profile) {
+              setUserRoleWithPersistence(session.user.id, profile.role || 'user');
+              // Store the full profile data for access across components
+              setUserProfile(profile);
+              console.log('Initial profile data:', profile);
+            } else {
+              setUserRoleWithPersistence(session.user.id, 'user');
+            }
+          } catch (profileError) {
+            console.error('Profile fetch error:', profileError);
+            // Still mark as initialized but with default role
+            if (!userRole) {
+              setUserRoleWithPersistence(session.user.id, 'user');
+            }
           }
         } else {
+          // No active session
           setUser(null);
           setUserRole(null);
           setUserProfile(null);
@@ -403,10 +537,25 @@ export function AuthProvider({ children }) {
         setAuthInitialized(true);
       } catch (error) {
         console.error('Auth initialization error:', error);
+        
+        // Retry logic for critical errors
+        if (retryCount < maxRetries) {
+          retryCount++;
+          console.log(`Retrying auth initialization after error (${retryCount}/${maxRetries})...`);
+          
+          // Exponential backoff for retries
+          setTimeout(initializeAuth, 1000 * retryCount);
+          return;
+        } else {
+          // After all retries, still mark as initialized but in a clean state
+          setUser(null);
+          setUserRole(null);
+          setUserProfile(null);
+          setAuthInitialized(true);
+        }
       } finally {
         clearTimeout(authTimeout);
         setLoading(false);
-        setAuthInitialized(true);
       }
     };
 
@@ -415,7 +564,14 @@ export function AuthProvider({ children }) {
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        console.log(`Auth state change: ${event}`, { 
+          hasSession: !!session,
+          currentUserId: user?.id,
+          newUserId: session?.user?.id
+        });
+        
         if (event === 'SIGNED_IN' && session?.user) {
+          // New sign in
           setUser(session.user);
           
           // Try to use cached profile for immediate update
@@ -426,41 +582,98 @@ export function AuthProvider({ children }) {
           }
           
           // Fetch profile data
-          const profile = await fetchUserProfile(session.user.id);
-          if (profile) {
-            setUserRoleWithPersistence(session.user.id, profile.role || 'user');
-            setUserProfile(profile);
-          } else {
+          try {
+            const profile = await fetchUserProfile(session.user.id);
+            if (profile) {
+              setUserRoleWithPersistence(session.user.id, profile.role || 'user');
+              setUserProfile(profile);
+            } else {
+              setUserRoleWithPersistence(session.user.id, 'user');
+            }
+          } catch (error) {
+            console.error('Error fetching profile on sign-in:', error);
+            // Default to user role if profile fetch fails
             setUserRoleWithPersistence(session.user.id, 'user');
           }
         } else if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
+          // User signed out or was deleted
+          console.log('User signed out or deleted');
+          
+          // Clear all state
           setUser(null);
           setUserRole(null);
           setUserProfile(null);
+          setOwnerStatus({
+            isOwner: false,
+            hasPendingRequest: false,
+            requestStatus: null,
+            rejectionReason: null
+          });
+          
+          // No need to clear localStorage here, that's handled in the logout function
+          
         } else if ((event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') && session?.user) {
-          // Always update user data on token refresh
+          // Token refreshed or user updated
+          console.log(`Auth token refreshed or user updated: ${event}`);
+          
+          // Update user data
           setUser(session.user);
           
-          // Fetch profile data
-          const profile = await fetchUserProfile(session.user.id);
-          if (profile) {
-            setUserRoleWithPersistence(session.user.id, profile.role || 'user');
-            setUserProfile(profile);
-          } else {
-            setUserRoleWithPersistence(session.user.id, 'user');
+          // Only refresh profile if user ID matches or is new
+          if (!user || user.id === session.user.id) {
+            try {
+              const profile = await fetchUserProfile(session.user.id);
+              if (profile) {
+                setUserRoleWithPersistence(session.user.id, profile.role || 'user');
+                setUserProfile(profile);
+              }
+            } catch (error) {
+              console.error('Error refreshing profile on token refresh:', error);
+              // Keep existing role/profile on error
+            }
           }
         } else if (session?.user && (!user || user.id !== session.user.id)) {
-          // Session exists but user state doesn't match
+          // Session exists but user state doesn't match - user switched accounts
+          console.log('User session change detected');
           setUser(session.user);
           
-          // Fetch profile data
-          const profile = await fetchUserProfile(session.user.id);
-          if (profile) {
-            setUserRoleWithPersistence(session.user.id, profile.role || 'user');
-            setUserProfile(profile);
-          } else {
+          // Reset state for new user
+          setUserRole(null);
+          setUserProfile(null);
+          setOwnerStatus({
+            isOwner: false,
+            hasPendingRequest: false,
+            requestStatus: null,
+            rejectionReason: null
+          });
+          
+          // Fetch profile data for new user
+          try {
+            const profile = await fetchUserProfile(session.user.id);
+            if (profile) {
+              setUserRoleWithPersistence(session.user.id, profile.role || 'user');
+              setUserProfile(profile);
+            } else {
+              setUserRoleWithPersistence(session.user.id, 'user');
+            }
+          } catch (error) {
+            console.error('Error fetching profile for new session:', error);
             setUserRoleWithPersistence(session.user.id, 'user');
           }
+        } else if (!session && user) {
+          // Session is gone but we still have a user in state
+          console.log('Session expired or removed while user state exists');
+          
+          // Clear user state
+          setUser(null);
+          setUserRole(null);
+          setUserProfile(null);
+          setOwnerStatus({
+            isOwner: false,
+            hasPendingRequest: false,
+            requestStatus: null,
+            rejectionReason: null
+          });
         }
       }
     );

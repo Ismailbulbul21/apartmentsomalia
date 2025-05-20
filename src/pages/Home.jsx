@@ -6,7 +6,9 @@ import { Link } from 'react-router-dom';
 
 // Utility function to get image URL from storage path
 const getImageUrl = (path) => {
-  if (!path) {
+  // Handle undefined, null, or empty strings
+  if (!path || path.trim() === '') {
+    console.log('Missing or empty path provided to getImageUrl, using placeholder');
     return '/images/placeholder-apartment.svg';
   }
   
@@ -18,17 +20,29 @@ const getImageUrl = (path) => {
   // For storage paths
   try {
     // Handle different path formats
-    let normalizedPath = path;
+    let normalizedPath = path.trim();
     
-    if (path.includes('apartment_images/')) {
-      normalizedPath = path.split('apartment_images/')[1];
-    } else if (!path.includes('/')) {
-      normalizedPath = `apartments/${path}`;
+    if (normalizedPath.includes('apartment_images/')) {
+      normalizedPath = normalizedPath.split('apartment_images/')[1];
+    } else if (!normalizedPath.includes('/')) {
+      normalizedPath = `apartments/${normalizedPath}`;
+    }
+    
+    // Safety check for empty normalized path after processing
+    if (!normalizedPath || normalizedPath === '') {
+      console.warn('Normalized path is empty, using placeholder');
+      return '/images/placeholder-apartment.svg';
     }
     
     const { data } = supabase.storage
       .from('apartment_images')
       .getPublicUrl(normalizedPath);
+    
+    // Safety check for empty publicUrl
+    if (!data || !data.publicUrl) {
+      console.warn('Empty publicUrl returned from Supabase, using placeholder');
+      return '/images/placeholder-apartment.svg';
+    }
     
     return data.publicUrl;
   } catch (error) {
@@ -41,13 +55,30 @@ const getImageUrl = (path) => {
 const LazyImage = memo(({ src, alt, className }) => {
   const [isLoaded, setIsLoaded] = useState(false);
   const [error, setError] = useState(false);
-  const [imageSrc, setImageSrc] = useState('');
+  const [imageSrc, setImageSrc] = useState(null);
   
   useEffect(() => {
-    // Process the src to get the correct URL
-    const processedSrc = getImageUrl(src);
-    setImageSrc(processedSrc);
+    // Process the src to get the correct URL or a placeholder
+    if (!src || src.trim() === '') {
+      setImageSrc('/images/placeholder-apartment.svg');
+    } else {
+      const processedSrc = getImageUrl(src);
+      setImageSrc(processedSrc);
+    }
   }, [src]);
+  
+  // Return early with placeholder if no valid source
+  if (!imageSrc) {
+    return (
+      <div className={`${className} relative overflow-hidden bg-night-800`}>
+        <img 
+          src="/images/placeholder-apartment.svg" 
+          alt="Placeholder" 
+          className="w-full h-full object-cover"
+        />
+      </div>
+    );
+  }
   
   return (
     <div className={`${className} relative overflow-hidden bg-night-800`}>
@@ -68,8 +99,8 @@ const LazyImage = memo(({ src, alt, className }) => {
       )}
       
       <img 
-        src={imageSrc} 
-        alt={alt}
+        src={imageSrc}
+        alt={alt || "Apartment image"}
         className={`w-full h-full object-cover transition-all duration-500 ${isLoaded ? 'opacity-100' : 'opacity-0'}`}
         onLoad={() => setIsLoaded(true)}
         onError={() => setError(true)}
@@ -91,7 +122,7 @@ const ApartmentCard = memo(({ apartment }) => {
   try {
     primaryImage = apartment.apartment_images && 
                  Array.isArray(apartment.apartment_images) && 
-                 apartment.apartment_images.find(img => img && img.is_primary);
+                 apartment.apartment_images.find(img => img && img.is_primary && img.storage_path && img.storage_path.trim() !== '');
   } catch (err) {
     console.error('Error finding primary image:', err);
   }
@@ -99,16 +130,27 @@ const ApartmentCard = memo(({ apartment }) => {
   // Safer image selection with fallbacks
   let imageToShow = { storage_path: '/images/placeholder-apartment.svg' };
   try {
-    if (primaryImage) {
+    if (primaryImage && primaryImage.storage_path && primaryImage.storage_path.trim() !== '') {
       imageToShow = primaryImage;
     } else if (apartment.apartment_images && 
               Array.isArray(apartment.apartment_images) && 
-              apartment.apartment_images.length > 0 && 
-              apartment.apartment_images[0]) {
-      imageToShow = apartment.apartment_images[0];
+              apartment.apartment_images.length > 0) {
+      // Look for the first valid image with a non-empty storage_path
+      const validImage = apartment.apartment_images.find(img => 
+        img && img.storage_path && img.storage_path.trim() !== ''
+      );
+      
+      if (validImage) {
+        imageToShow = validImage;
+      }
     }
   } catch (err) {
     console.error('Error determining image to show:', err);
+  }
+  
+  // Final validation of image path - make sure it's not empty
+  if (!imageToShow.storage_path || imageToShow.storage_path.trim() === '') {
+    imageToShow.storage_path = '/images/placeholder-apartment.svg';
   }
   
   return (
