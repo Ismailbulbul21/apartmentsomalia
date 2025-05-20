@@ -717,22 +717,22 @@ const NewListing = () => {
   return (
     <div className="max-w-4xl mx-auto">
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold text-gray-800">Create New Apartment Listing</h2>
+        <h2 className="text-2xl font-bold text-gray-800">Diiwaan-gelin Guryaha Cusub</h2>
         <Link to="/owner/dashboard" className="text-blue-600 hover:underline flex items-center">
           <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
           </svg>
-          Back to Listings
+          Ku Noqo Liistada
         </Link>
       </div>
       
       {submitSuccess ? (
         <div className="bg-green-100 text-green-700 p-6 rounded-lg mb-6">
-          <h3 className="font-semibold text-lg mb-2">Listing Created Successfully!</h3>
-          <p>Your apartment listing has been submitted for approval. Once approved, it will be visible to potential tenants.</p>
+          <h3 className="font-semibold text-lg mb-2">Si Guul leh ayaa loo Diiwaan-geliyay!</h3>
+          <p>Diiwaan-gelintu waxay u gudbineysaa ansixinta. Marka la ogolaado, waxay u muuqan doontaa kireystayaasha suurtagalka ah.</p>
           <div className="mt-4">
             <Link to="/owner/dashboard" className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
-              Return to Dashboard
+              Ku Noqo Bogga Maamulka
             </Link>
           </div>
         </div>
@@ -743,17 +743,17 @@ const NewListing = () => {
             <div className="flex items-center justify-between max-w-2xl mx-auto">
               <div className="flex flex-col items-center">
                 <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white font-medium">1</div>
-                <span className="text-xs mt-1 text-blue-600 font-medium">Basic Info</span>
+                <span className="text-xs mt-1 text-blue-600 font-medium">Macluumaadka Aasaasiga</span>
               </div>
               <div className="flex-grow h-1 bg-blue-200 mx-2"></div>
               <div className="flex flex-col items-center">
                 <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white font-medium">2</div>
-                <span className="text-xs mt-1 text-blue-600 font-medium">Location</span>
+                <span className="text-xs mt-1 text-blue-600 font-medium">Goobta</span>
               </div>
               <div className="flex-grow h-1 bg-blue-200 mx-2"></div>
               <div className="flex flex-col items-center">
                 <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white font-medium">3</div>
-                <span className="text-xs mt-1 text-blue-600 font-medium">Images</span>
+                <span className="text-xs mt-1 text-blue-600 font-medium">Sawirrada</span>
               </div>
             </div>
           </div>
@@ -766,13 +766,13 @@ const NewListing = () => {
             )}
             
             <div className="mb-8">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">1. Basic Information</h3>
+              <h3 className="text-lg font-semibold text-gray-800 mb-4">1. Macluumaadka Aasaasiga ah</h3>
               
               <div className="bg-gray-50 p-5 rounded-lg border border-gray-200">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-1">
-                      Apartment Title *
+                      Cinwaanka Guriga *
                     </label>
                     <input
                       id="title"
@@ -780,14 +780,14 @@ const NewListing = () => {
                       value={title}
                       onChange={(e) => setTitle(e.target.value)}
                       className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="e.g. Modern 2 Bedroom Apartment in Hodan"
+                      placeholder="tusaale: Guri Casri ah oo 2 qol leh oo ku yaala Hodan"
                       required
                     />
                   </div>
                   
                   <div>
                     <label htmlFor="price" className="block text-sm font-medium text-gray-700 mb-1">
-                      Monthly Rent (USD) *
+                      Kirada Bishii (USD) *
                     </label>
                     <input
                       id="price"
@@ -797,14 +797,14 @@ const NewListing = () => {
                       value={pricePerMonth}
                       onChange={(e) => setPricePerMonth(e.target.value)}
                       className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="e.g. 300"
+                      placeholder="tusaale: 300"
                       required
                     />
                   </div>
                   
                   <div>
                     <label htmlFor="rooms" className="block text-sm font-medium text-gray-700 mb-1">
-                      Bedrooms *
+                      Qolalka jiifka *
                     </label>
                     <input
                       id="rooms"
@@ -819,7 +819,7 @@ const NewListing = () => {
                   
                   <div>
                     <label htmlFor="bathrooms" className="block text-sm font-medium text-gray-700 mb-1">
-                      Bathrooms *
+                      Musqulaha *
                     </label>
                     <input
                       id="bathrooms"
@@ -841,7 +841,7 @@ const NewListing = () => {
                         onChange={(e) => setIsFurnished(e.target.checked)}
                         className="h-5 w-5 text-blue-600 rounded"
                       />
-                      <span className="ml-2 text-sm font-medium text-gray-700">Furnished</span>
+                      <span className="ml-2 text-sm font-medium text-gray-700">Alaab leh</span>
                     </label>
                   </div>
                 </div>
@@ -849,13 +849,13 @@ const NewListing = () => {
             </div>
             
             <div className="mb-8">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">2. Location Details</h3>
+              <h3 className="text-lg font-semibold text-gray-800 mb-4">2. Faahfaahinta Goobta</h3>
               
               <div className="bg-gray-50 p-5 rounded-lg border border-gray-200">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label htmlFor="district" className="block text-sm font-medium text-gray-700 mb-1">
-                      District *
+                      Degmada *
                     </label>
                     <select
                       id="district"
@@ -864,7 +864,7 @@ const NewListing = () => {
                       className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                       required
                     >
-                      <option value="">Select a district</option>
+                      <option value="">Dooro degmo</option>
                       {districts.map(d => (
                         <option key={d} value={d}>{d}</option>
                       ))}
@@ -873,7 +873,7 @@ const NewListing = () => {
                   
                   <div className="md:col-span-2">
                     <label htmlFor="location" className="block text-sm font-medium text-gray-700 mb-1">
-                      Detailed Location *
+                      Goobta Faahfaahsan *
                     </label>
                     <input
                       id="location"
@@ -881,11 +881,11 @@ const NewListing = () => {
                       value={locationDescription}
                       onChange={(e) => setLocationDescription(e.target.value)}
                       className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="e.g. Near Peace Garden, 2 blocks from Bakara Market"
+                      placeholder="tusaale: U dhow Peace Garden, 2 block ka fog Bakaaraha"
                       required
                     />
                     <p className="mt-1 text-sm text-gray-500">
-                      Add specific landmarks or streets to help tenants find your property easily
+                      Ku dar calaamado gaar ah ama waddooyinka si aad uga caawiso kireystayaasha inay si fudud u helaan hantidaada
                     </p>
                   </div>
                 </div>
@@ -893,11 +893,11 @@ const NewListing = () => {
             </div>
             
             <div className="mb-8">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">3. Description</h3>
+              <h3 className="text-lg font-semibold text-gray-800 mb-4">3. Sharraxaad</h3>
               
               <div className="bg-gray-50 p-5 rounded-lg border border-gray-200">
                 <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
-                  Apartment Description *
+                  Sharraxaada Guriga *
                 </label>
                 <textarea
                   id="description"
@@ -905,22 +905,22 @@ const NewListing = () => {
                   onChange={(e) => setDescription(e.target.value)}
                   rows={5}
                   className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Describe your apartment in detail. Include information about amenities, neighborhood, nearby facilities, etc."
+                  placeholder="Gurigaaga si faahfaahsan u sharax. Ku dar macluumaad ku saabsan adeegyada, xaafadda, xarumaha dhow, iwm."
                   required
                 ></textarea>
               </div>
             </div>
             
             <div className="mb-8">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">4. Apartment Images</h3>
+              <h3 className="text-lg font-semibold text-gray-800 mb-4">4. Sawirrada Guriga</h3>
               
               <div className="bg-gray-50 p-5 rounded-lg border border-gray-200">
                 <div className="mb-4">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Upload Photos * (Minimum 4 images required)
+                    Soo Rar Sawirada * (Ugu yaraan 4 sawir ayaa loo baahan yahay)
                   </label>
                   <p className="text-sm text-gray-500 mb-3">
-                    Click on an image to set it as the primary image (will be shown first)
+                    Riix sawir si aad uga dhigto sawirka koowaad (kaas oo marka hore la tusi doono)
                   </p>
                   
                   <div className="flex items-center space-x-4 mb-4">
@@ -928,7 +928,7 @@ const NewListing = () => {
                       <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                       </svg>
-                      <span className="font-medium">Add Images</span>
+                      <span className="font-medium">Ku Dar Sawiro</span>
                       <input
                         type="file"
                         multiple
@@ -938,8 +938,8 @@ const NewListing = () => {
                       />
                     </label>
                     <span className={`text-sm ${images.length < 4 ? 'text-red-500 font-medium' : 'text-green-600'}`}>
-                      {images.length} {images.length === 1 ? 'image' : 'images'} selected
-                      {images.length < 4 && ` (${4 - images.length} more required)`}
+                      {images.length} {images.length === 1 ? 'sawir' : 'sawir'} la doortay
+                      {images.length < 4 && ` (waxaa loo baahan yahay ${4 - images.length} oo kale)`}
                     </span>
                   </div>
                 </div>
@@ -977,7 +977,7 @@ const NewListing = () => {
                             </div>
                             {index === primaryImageIndex && (
                               <span className="absolute bottom-0 left-0 right-0 bg-blue-600 text-white text-xs py-1 text-center">
-                                Primary Image
+                                Sawirka Koowaad
                               </span>
                             )}
                           </div>
@@ -1005,10 +1005,10 @@ const NewListing = () => {
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    <span>Creating... {uploadProgress}%</span>
+                    <span>La abuurayaa... {uploadProgress}%</span>
                   </div>
                 ) : (
-                  'Create Listing'
+                  'Diiwaan-geli'
                 )}
               </button>
             </div>
@@ -1399,7 +1399,7 @@ const EditListing = () => {
                       onChange={(e) => setIsFurnished(e.target.checked)}
                       className="h-5 w-5 text-blue-600 rounded"
                     />
-                    <span className="ml-2 text-sm font-medium text-gray-700">Furnished</span>
+                    <span className="ml-2 text-sm font-medium text-gray-700">Alaab leh</span>
                   </label>
                 </div>
               </div>
