@@ -21,25 +21,103 @@ const supabaseOptions = {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: true
+    detectSessionInUrl: true,
+    storageKey: 'supabase-auth-token',
+    storage: window.localStorage,
+    // Automatically refresh session if it expires
+    onAuthStateChange: (event, session) => {
+      console.log('Auth state change event:', event);
+      if (event === 'TOKEN_REFRESHED' || event === 'SIGNED_IN') {
+        console.log('Session refreshed or signed in');
+      } else if (event === 'SIGNED_OUT') {
+        console.log('User signed out');
+        // Clear any cached user data
+        localStorage.removeItem('userProfile');
+        localStorage.removeItem('userRole');
+      }
+    }
   },
   global: {
     fetch: (url, options) => {
-      // Set a shorter timeout
-      const timeout = 15000;
+      // Set a longer timeout for better reliability
+      const timeout = 30000;
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeout);
       
       return fetch(url, {
         ...options,
         signal: controller.signal,
-      }).finally(() => clearTimeout(timeoutId));
+        // Add cache control headers to avoid stale responses
+        headers: {
+          ...options.headers,
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+        }
+      })
+      .then(response => {
+        clearTimeout(timeoutId);
+        return response;
+      })
+      .catch(error => {
+        clearTimeout(timeoutId);
+        console.error('Supabase fetch error:', error);
+        // Throw a more descriptive error
+        throw new Error(`Connection error: ${error.message}. Please check your internet connection.`);
+      });
+    }
+  },
+  // Add better error handling and retry logic
+  realtime: {
+    params: {
+      eventsPerSecond: 10
     }
   }
 };
 
 // Create singleton Supabase client
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, supabaseOptions);
+
+/**
+ * Attempts to recover an expired session
+ * @returns {Promise<boolean>} True if session was recovered
+ */
+export const recoverSession = async () => {
+  try {
+    // Check if we have a session
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session) {
+      // Try to refresh the session
+      const { data, error } = await supabase.auth.refreshSession();
+      
+      if (error) {
+        console.error('Session refresh error:', error.message);
+        return false;
+      }
+      
+      if (data.session) {
+        console.log('Session successfully refreshed');
+        return true;
+      }
+    } else {
+      // We already have a valid session
+      return true;
+    }
+    
+    return false;
+  } catch (error) {
+    console.error('Session recovery error:', error);
+    return false;
+  }
+};
+
+// Add event listener for online status to recover connection
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', async () => {
+    console.log('Network connection restored, recovering session...');
+    await recoverSession();
+  });
+}
 
 /**
  * Helper function to upload an image to storage and create a record in apartment_images
