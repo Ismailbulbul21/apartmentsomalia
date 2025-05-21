@@ -21,7 +21,7 @@ const supabaseOptions = {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: true
+    detectSessionInUrl: false
   },
   global: {
     fetch: (url, options) => {

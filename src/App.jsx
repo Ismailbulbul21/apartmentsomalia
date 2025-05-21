@@ -3,7 +3,6 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { Suspense, lazy, useState, useEffect } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import React from 'react';
-import { recoverSession } from './lib/supabase';
 
 // Layout components
 import Header from './components/layout/Header';
@@ -104,12 +103,10 @@ const Contact = lazyWithRetry(() => import('./pages/Contact'));
 const NotFound = lazyWithRetry(() => import('./pages/NotFound'));
 const WriteReview = lazyWithRetry(() => import('./pages/WriteReview'));
 
-// Protected route component with improved loading state and session recovery
+// Protected route component with improved loading state
 const ProtectedRoute = ({ children, allowedRoles = [] }) => {
   const { user, userRole, loading } = useAuth();
   const [loadingTimeout, setLoadingTimeout] = useState(false);
-  const [recoveringSession, setRecoveringSession] = useState(false);
-  const [recoveryAttempted, setRecoveryAttempted] = useState(false);
   
   // Set a loading timeout to prevent indefinite loading
   useEffect(() => {
@@ -122,42 +119,15 @@ const ProtectedRoute = ({ children, allowedRoles = [] }) => {
     }
   }, [loading]);
   
-  // Attempt to recover session if it seems to be expired
-  useEffect(() => {
-    if (!loading && !user && !recoveryAttempted) {
-      const attemptRecovery = async () => {
-        setRecoveringSession(true);
-        try {
-          console.log('Attempting session recovery in ProtectedRoute');
-          const recovered = await recoverSession();
-          console.log('Protected route session recovery:', recovered ? 'successful' : 'failed');
-        } catch (error) {
-          console.error('Session recovery error in ProtectedRoute:', error);
-        } finally {
-          setRecoveringSession(false);
-          setRecoveryAttempted(true);
-        }
-      };
-      
-      attemptRecovery();
-    }
-  }, [loading, user, recoveryAttempted]);
-  
-  // Show loading state while still trying
-  if (loading || recoveringSession) {
+  if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh]">
         <LoadingSpinner />
-        {(loadingTimeout || recoveringSession) && (
+        {loadingTimeout && (
           <p className="mt-4 text-gray-600 text-sm">
-            {recoveringSession ? 'Attempting to restore your session...' : 'This is taking longer than expected.'}
+            This is taking longer than expected. 
             <button 
-              onClick={() => {
-                // Clear any potentially corrupted state
-                localStorage.removeItem('userProfile');
-                localStorage.removeItem('userRole');
-                window.location.reload();
-              }} 
+              onClick={() => window.location.reload()} 
               className="ml-2 text-primary-600 hover:underline"
             >
               Try refreshing
@@ -168,79 +138,16 @@ const ProtectedRoute = ({ children, allowedRoles = [] }) => {
     );
   }
   
-  // After recovery attempts, if still no user, redirect to login
-  if (!user) {
-    console.log('No user after recovery attempt, redirecting to login');
-    return <Navigate to="/login" replace />;
-  }
+  if (!user) return <Navigate to="/login" replace />;
   
-  // Check role permissions
   if (allowedRoles.length > 0 && !allowedRoles.includes(userRole)) {
-    console.log(`User role ${userRole} not allowed, redirecting to home`);
     return <Navigate to="/" replace />;
   }
   
-  // All checks passed, render the protected content
   return children;
 };
 
 function App() {
-  // Session and network recovery
-  useEffect(() => {
-    // Track if the app is currently in a reconnection state
-    let isReconnecting = false;
-    
-    // Handler for when network connection is restored
-    const handleOnline = async () => {
-      console.log('Network connection restored');
-      if (!isReconnecting) {
-        isReconnecting = true;
-        try {
-          // Attempt to recover the session
-          const recovered = await recoverSession();
-          console.log('Session recovery attempt:', recovered ? 'successful' : 'failed');
-          
-          // If recovery failed and we're on a protected route, redirect to login
-          if (!recovered) {
-            const isProtectedRoute = window.location.pathname.includes('/profile') || 
-                                    window.location.pathname.includes('/owner') || 
-                                    window.location.pathname.includes('/admin') ||
-                                    window.location.pathname.includes('/review') ||
-                                    window.location.pathname.includes('/become-owner');
-            
-            if (isProtectedRoute) {
-              console.log('Protected route detected, redirecting to login');
-              window.location.href = '/login';
-            }
-          }
-        } catch (error) {
-          console.error('Error during reconnection:', error);
-        } finally {
-          isReconnecting = false;
-        }
-      }
-    };
-    
-    // Timer to regularly check session status (every 5 minutes)
-    const sessionCheckInterval = setInterval(async () => {
-      try {
-        await recoverSession();
-      } catch (error) {
-        console.error('Error during scheduled session check:', error);
-      }
-    }, 5 * 60 * 1000);
-    
-    // Event listeners for network status
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('focus', handleOnline); // Also check when tab regains focus
-
-    // Clean up event listeners
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('focus', handleOnline);
-      clearInterval(sessionCheckInterval);
-    };
-  }, []);
 
   return (
     <Router>
