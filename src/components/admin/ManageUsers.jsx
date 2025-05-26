@@ -9,6 +9,8 @@ const ManageUsers = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
+  const [updatingRole, setUpdatingRole] = useState(false);
+  const [selectedRole, setSelectedRole] = useState('');
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const pageSize = 10;
@@ -58,25 +60,33 @@ const ManageUsers = () => {
     }
   };
 
-  const handleUpdateUserRole = async (userId, newRole) => {
+  const handleUpdateUserRole = async () => {
+    if (!selectedUser || !selectedRole) return;
+    
     try {
+      setUpdatingRole(true);
+      
+      console.log(`Updating user ${selectedUser.id} role to ${selectedRole}`);
+      
       const { error } = await supabase
         .from('profiles')
-        .update({ role: newRole })
-        .eq('id', userId);
+        .update({ role: selectedRole })
+        .eq('id', selectedUser.id);
         
       if (error) throw error;
       
       // Update the local state
       setUsers(users.map(user => 
-        user.id === userId ? { ...user, role: newRole } : user
+        user.id === selectedUser.id ? { ...user, role: selectedRole } : user
       ));
       
       setShowModal(false);
-      alert(`User role updated to ${newRole} successfully`);
+      alert(`User role updated to ${selectedRole} successfully`);
     } catch (error) {
       console.error('Error updating user role:', error);
       alert('Failed to update user role. Please try again.');
+    } finally {
+      setUpdatingRole(false);
     }
   };
 
@@ -128,6 +138,7 @@ const ManageUsers = () => {
 
   const openUserModal = (user) => {
     setSelectedUser(user);
+    setSelectedRole(user.role || 'user');
     setShowModal(true);
   };
 
@@ -290,8 +301,8 @@ const ManageUsers = () => {
                       <label className="block text-sm font-medium text-gray-700">Role</label>
                       <select 
                         className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
-                        defaultValue={selectedUser.role || 'user'}
-                        id="user-role"
+                        value={selectedRole}
+                        onChange={(e) => setSelectedRole(e.target.value)}
                       >
                         <option value="user">User</option>
                         <option value="owner">Owner</option>
@@ -305,12 +316,10 @@ const ManageUsers = () => {
                 <button 
                   type="button" 
                   className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-primary-600 text-base font-medium text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 sm:ml-3 sm:w-auto sm:text-sm"
-                  onClick={() => {
-                    const newRole = document.getElementById('user-role').value;
-                    handleUpdateUserRole(selectedUser.id, newRole);
-                  }}
+                  onClick={handleUpdateUserRole}
+                  disabled={updatingRole}
                 >
-                  Save
+                  {updatingRole ? 'Saving...' : 'Save'}
                 </button>
                 <button 
                   type="button" 

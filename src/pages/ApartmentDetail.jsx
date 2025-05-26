@@ -52,6 +52,134 @@ const getImageUrl = (path) => {
   }
 };
 
+// Image viewer modal component
+const ImageViewerModal = ({ images, activeIndex, onClose, onPrev, onNext }) => {
+  const [touchStart, setTouchStart] = useState(null);
+  const [touchEnd, setTouchEnd] = useState(null);
+  
+  // Handle swipe gestures
+  const handleTouchStart = (e) => {
+    setTouchStart(e.targetTouches[0].clientX);
+  };
+  
+  const handleTouchMove = (e) => {
+    setTouchEnd(e.targetTouches[0].clientX);
+  };
+  
+  const handleTouchEnd = () => {
+    if (!touchStart || !touchEnd) return;
+    
+    const distance = touchStart - touchEnd;
+    const isLeftSwipe = distance > 50;
+    const isRightSwipe = distance < -50;
+    
+    if (isLeftSwipe) {
+      onNext();
+    }
+    
+    if (isRightSwipe) {
+      onPrev();
+    }
+    
+    setTouchStart(null);
+    setTouchEnd(null);
+  };
+  
+  // Handle keyboard navigation
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') onClose();
+      if (e.key === 'ArrowLeft') onPrev();
+      if (e.key === 'ArrowRight') onNext();
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose, onPrev, onNext]);
+  
+  // Prevent body scroll when modal is open
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = 'auto';
+    };
+  }, []);
+  
+  if (!images || images.length === 0) return null;
+  
+  const currentImage = images[activeIndex];
+  const imageUrl = currentImage && currentImage.storage_path 
+    ? getImageUrl(currentImage.storage_path) 
+    : '/images/placeholder-apartment.svg';
+  
+  return (
+    <div 
+      className="fixed inset-0 z-50 bg-black bg-opacity-90 flex items-center justify-center"
+      onClick={onClose}
+    >
+      <div 
+        className="relative w-full h-full flex flex-col justify-center items-center"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
+        {/* Close button */}
+        <button 
+          className="absolute top-4 right-4 z-10 text-white bg-black bg-opacity-50 rounded-full p-2"
+          onClick={onClose}
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+        
+        {/* Main image */}
+        <div 
+          className="relative w-full h-full flex items-center justify-center p-4"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <img 
+            src={imageUrl} 
+            alt={`Image ${activeIndex + 1}`}
+            className="max-h-full max-w-full object-contain"
+            onError={(e) => {
+              e.target.onerror = null;
+              e.target.src = '/images/placeholder-apartment.svg';
+            }}
+          />
+        </div>
+        
+        {/* Navigation buttons */}
+        {images.length > 1 && (
+          <>
+            <button 
+              className="absolute left-2 top-1/2 transform -translate-y-1/2 bg-black bg-opacity-50 text-white p-2 rounded-full"
+              onClick={(e) => { e.stopPropagation(); onPrev(); }}
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <button 
+              className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-black bg-opacity-50 text-white p-2 rounded-full"
+              onClick={(e) => { e.stopPropagation(); onNext(); }}
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+            
+            {/* Image counter */}
+            <div className="absolute bottom-4 left-0 right-0 text-center text-white text-sm">
+              {activeIndex + 1} / {images.length}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
+
 export default function ApartmentDetail() {
   const { id } = useParams();
   const { user } = useAuth();
@@ -61,6 +189,7 @@ export default function ApartmentDetail() {
   const [error, setError] = useState(null);
   const [reviews, setReviews] = useState([]);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [showImageViewer, setShowImageViewer] = useState(false);
   const navigate = useNavigate();
 
   // Fetch apartment data
@@ -360,7 +489,10 @@ export default function ApartmentDetail() {
             <div className="flex flex-col lg:flex-row">
               {/* Main Image */}
               <div className="lg:w-2/3 relative">
-                <div className="bg-night-900 aspect-[16/9]">
+                <div 
+                  className="bg-night-900 aspect-[16/9] cursor-pointer"
+                  onClick={() => setShowImageViewer(true)}
+                >
                   {currentImage && currentImage.storage_path && currentImage.storage_path.trim() !== '' ? (
                     <>
                       <img 
@@ -375,6 +507,15 @@ export default function ApartmentDetail() {
                       />
                       <div className="absolute inset-0 bg-night-900 opacity-0">
                         {/* Invisible fallback that becomes visible if image fails */}
+                      </div>
+                      
+                      {/* Click to view indicator */}
+                      <div className="absolute bottom-4 right-4 bg-black bg-opacity-60 text-white px-3 py-1 rounded-full text-xs flex items-center">
+                        <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                        View
                       </div>
                     </>
                   ) : (
@@ -531,6 +672,34 @@ export default function ApartmentDetail() {
           </div>
         </div>
       </div>
+      
+      {/* Full screen image viewer modal */}
+      <AnimatePresence>
+        {showImageViewer && apartment.apartment_images && apartment.apartment_images.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            <ImageViewerModal 
+              images={apartment.apartment_images}
+              activeIndex={activeImageIndex}
+              onClose={() => setShowImageViewer(false)}
+              onPrev={() => {
+                setActiveImageIndex(prev => 
+                  prev === 0 ? apartment.apartment_images.length - 1 : prev - 1
+                );
+              }}
+              onNext={() => {
+                setActiveImageIndex(prev => 
+                  prev === apartment.apartment_images.length - 1 ? 0 : prev + 1
+                );
+              }}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
       
       {/* Details Section */}
       <div className="container mx-auto px-4 py-12">
