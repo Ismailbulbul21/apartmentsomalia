@@ -80,6 +80,35 @@ const ManageUsers = () => {
         user.id === selectedUser.id ? { ...user, role: selectedRole } : user
       ));
       
+      // Clear localStorage cache for this user to force a refresh on their next login
+      try {
+        localStorage.removeItem(`user_role_${selectedUser.id}`);
+        localStorage.removeItem(`user_profile_${selectedUser.id}`);
+        localStorage.removeItem(`profile_fetch_time_${selectedUser.id}`);
+        console.log(`Cleared cache for user ${selectedUser.id}`);
+      } catch (e) {
+        console.warn('Could not clear localStorage cache:', e);
+      }
+      
+      // Broadcast a role change event to notify other clients
+      try {
+        // Insert a notification record that will trigger realtime updates
+        await supabase
+          .from('profile_updates')
+          .insert({
+            user_id: selectedUser.id,
+            updated_by: 'admin',
+            update_type: 'role_change',
+            new_role: selectedRole,
+            timestamp: new Date().toISOString()
+          });
+        
+        console.log('Broadcasted role change notification');
+      } catch (broadcastError) {
+        console.warn('Failed to broadcast role change:', broadcastError);
+        // Non-critical error, continue with the process
+      }
+      
       setShowModal(false);
       alert(`User role updated to ${selectedRole} successfully`);
     } catch (error) {

@@ -6,7 +6,16 @@ import { useAuth } from '../context/AuthContext';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 
 export default function UserProfile() {
-  const { user, userRole, logout, ownerStatus, refreshOwnerStatus, refreshUserProfile } = useAuth();
+  const { 
+    user, 
+    userRole, 
+    logout, 
+    ownerStatus, 
+    refreshOwnerStatus, 
+    refreshUserProfile,
+    roleChangeNotification,
+    clearRoleChangeNotification
+  } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [activeTab, setActiveTab] = useState('profile');
@@ -503,8 +512,34 @@ export default function UserProfile() {
                 </div>
                 <h2 className="text-xl font-semibold">{fullName || 'User'}</h2>
                 <p className="text-slate-300 text-sm truncate max-w-full">{email}</p>
-                {/* Debug role display */}
+                {/* Role display */}
                 <p className="text-blue-300 text-xs mt-1">Role: {userRole || 'none'}</p>
+                
+                {/* Role change notification */}
+                <AnimatePresence>
+                  {roleChangeNotification && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      className="mt-3 p-2 bg-blue-600 text-white rounded-md shadow-lg"
+                    >
+                      <div className="flex justify-between items-center">
+                        <p className="text-sm font-medium">
+                          Your role has been changed from{' '}
+                          <span className="font-bold">{roleChangeNotification.previousRole}</span> to{' '}
+                          <span className="font-bold">{roleChangeNotification.newRole}</span>
+                        </p>
+                        <button 
+                          onClick={clearRoleChangeNotification}
+                          className="ml-2 text-white hover:text-blue-200"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
               
               {/* Mobile horizontal scrollable nav - Add admin tab conditionally */}

@@ -111,12 +111,27 @@ export function AuthProvider({ children }) {
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [showMessageNotification, setShowMessageNotification] = useState(false);
   const [authInitialized, setAuthInitialized] = useState(false);
+  const [roleChangeNotification, setRoleChangeNotification] = useState(null);
 
   // Function to set user role with localStorage persistence
-  const setUserRoleWithPersistence = (userId, role) => {
+  const setUserRoleWithPersistence = (userId, role, previousRole = null) => {
     if (role) {
       setUserRole(role);
       saveRoleToLocalStorage(userId, role);
+      
+      // If previous role is provided and different from new role, show notification
+      if (previousRole && previousRole !== role) {
+        setRoleChangeNotification({
+          previousRole,
+          newRole: role,
+          timestamp: new Date().toISOString()
+        });
+        
+        // Auto-clear notification after 10 seconds
+        setTimeout(() => {
+          setRoleChangeNotification(null);
+        }, 10000);
+      }
     } else {
       setUserRole(null);
     }
@@ -241,37 +256,46 @@ export function AuthProvider({ children }) {
       if (profileError) {
         console.error('Error fetching profile:', profileError);
         
-        // Retry logic for transient errors
-        if (retryAttempt < maxRetries) {
-          console.log(`Retrying profile fetch (${retryAttempt + 1}/${maxRetries})...`);
-          // Exponential backoff: 1s, 2s, 4s, etc.
-          const delay = Math.pow(2, retryAttempt) * 1000;
-          await new Promise(resolve => setTimeout(resolve, delay));
-          return fetchUserProfile(userId, retryAttempt + 1);
+        // If we've already tried a few times, just return what we have
+        if (retryAttempt >= maxRetries) {
+          console.warn(`Max retries (${maxRetries}) reached for profile fetch, using fallback`);
+          
+          // If we have a cached role, use it
+          if (cachedRole) {
+            return {
+              id: userId,
+              role: cachedRole,
+              created_at: new Date().toISOString()
+            };
+          }
+          
+          // Otherwise return a default profile
+          return {
+            id: userId,
+            role: 'user',
+            created_at: new Date().toISOString()
+          };
         }
         
-        // If we have a cached profile, use it as fallback after all retries
-        if (cachedProfile) {
-          console.log('Using cached profile as fallback after fetch error');
-          setUserProfile(cachedProfile);
-          setUserRoleWithPersistence(userId, cachedProfile.role || 'user');
-          return cachedProfile;
-        }
-        
-        throw profileError;
+        // Try again after a short delay
+        console.log(`Retrying profile fetch (attempt ${retryAttempt + 1})`);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        return fetchUserProfile(userId, retryAttempt + 1);
       }
       
       if (profileData) {
         // Get avatar URL if present
         profileData.avatar_url = processAvatarUrl(profileData.avatar_url);
         
-        // Determine user role
-        let role = 'user';
+        // IMPORTANT CHANGE: Prioritize the role from the profiles table
+        let role = profileData.role || 'user';
         
-        // Admin check via env var
+        // Only override with admin role if specifically set in env var
         if (userId === ADMIN_USER_ID) {
           role = 'admin';
-        } else {
+        } 
+        // Only check owner_requests if role is not already set to owner or admin
+        else if (role !== 'owner' && role !== 'admin') {
           // Check if user is an owner via owner_requests table
           try {
             const { data: ownerData } = await supabase
@@ -283,11 +307,25 @@ export function AuthProvider({ children }) {
               
             if (ownerData) {
               role = 'owner';
+              
+              // Update the profile with owner role if needed
+              if (profileData.role !== 'owner') {
+                const { error: updateError } = await supabase
+                  .from('profiles')
+                  .update({ role: 'owner' })
+                  .eq('id', userId);
+                  
+                if (updateError) {
+                  console.warn('Failed to update profile with owner role:', updateError);
+                }
+              }
             }
           } catch (ownerCheckError) {
             console.error('Error checking owner status:', ownerCheckError);
             // If we can't check owner status, default to cached role or 'user'
-            role = cachedRole || 'user';
+            if (!role) {
+              role = cachedRole || 'user';
+            }
           }
         }
         
@@ -333,51 +371,36 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // Background refresh profile without affecting UI state
+  // Function to refresh profile data in the background
   const refreshProfileInBackground = async (userId) => {
-    if (!userId) return;
-    
     try {
-      console.log('Background refresh of profile for:', userId);
+      console.log('Refreshing profile in background for user:', userId);
       
-      // Check when the profile was last refreshed to avoid too frequent updates
-      // Only refresh if it's been more than 30 seconds since last refresh
-      const lastRefreshKey = `last_profile_refresh_${userId}`;
-      const lastRefresh = parseInt(localStorage.getItem(lastRefreshKey) || '0');
-      const now = Date.now();
-      
-      if (now - lastRefresh < 30000) { // 30 seconds
-        console.log('Skipping background refresh, too recent');
-        return;
-      }
-      
-      // Mark the refresh time before starting the actual refresh
-      localStorage.setItem(lastRefreshKey, now.toString());
-      
-      // Fetch most up-to-date profile directly
+      // Fetch fresh profile data
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .single();
-        
+      
       if (profileError) {
-        console.warn('Background profile refresh error:', profileError);
+        console.warn('Error refreshing profile in background:', profileError);
         return;
       }
       
-      // If we have profile data, determine role
       if (profileData) {
         // Process avatar URL
         profileData.avatar_url = processAvatarUrl(profileData.avatar_url);
         
-        // Determine user role
-        let role = 'user';
+        // IMPORTANT CHANGE: Prioritize the role from the profiles table
+        let role = profileData.role || 'user';
         
-        // Admin check
+        // Only override with admin role if specifically set in env var
         if (userId === ADMIN_USER_ID) {
           role = 'admin';
-        } else {
+        } 
+        // Only check owner_requests if role is not already set to owner or admin
+        else if (role !== 'owner' && role !== 'admin') {
           // Check if user is an owner
           try {
             const { data: ownerData } = await supabase
@@ -389,12 +412,24 @@ export function AuthProvider({ children }) {
               
             if (ownerData) {
               role = 'owner';
+              
+              // Update the profile with owner role if needed
+              if (profileData.role !== 'owner') {
+                const { error: updateError } = await supabase
+                  .from('profiles')
+                  .update({ role: 'owner' })
+                  .eq('id', userId);
+                  
+                if (updateError) {
+                  console.warn('Failed to update profile with owner role:', updateError);
+                }
+              }
             }
           } catch (ownerError) {
             console.warn('Error checking owner status in background:', ownerError);
             // Keep existing role on error
             const existingRole = getRoleFromLocalStorage(userId);
-            if (existingRole) {
+            if (existingRole && !role) {
               role = existingRole;
             }
           }
@@ -428,8 +463,7 @@ export function AuthProvider({ children }) {
         }
       }
     } catch (error) {
-      console.warn('Background profile refresh error:', error);
-      // No UI update on error in background refresh
+      console.warn('Error in background profile refresh:', error);
     }
   };
 
@@ -915,6 +949,80 @@ export function AuthProvider({ children }) {
     }
   }, [user, authInitialized]);
 
+  // Set up periodic profile refresh when logged in
+  useEffect(() => {
+    if (user?.id && authInitialized) {
+      console.log('Setting up periodic profile refresh');
+      
+      // Initial refresh after a short delay
+      const initialTimeout = setTimeout(() => {
+        refreshProfileInBackground(user.id);
+      }, 10000); // 10 seconds after login
+      
+      // Set up interval for periodic refreshes (every 30 seconds)
+      const interval = setInterval(() => {
+        console.log('Periodic profile refresh');
+        refreshProfileInBackground(user.id);
+      }, 30 * 1000); // 30 seconds
+      
+      return () => {
+        clearTimeout(initialTimeout);
+        clearInterval(interval);
+      };
+    }
+  }, [user?.id, authInitialized]);
+
+  // Listen for profile updates (like role changes) in realtime
+  useEffect(() => {
+    if (user?.id && authInitialized) {
+      console.log('Setting up profile updates listener');
+      
+      // Subscribe to profile_updates table for realtime notifications
+      const profileUpdatesSubscription = supabase
+        .channel('profile_updates_channel')
+        .on('postgres_changes', 
+          { 
+            event: 'INSERT', 
+            schema: 'public', 
+            table: 'profile_updates',
+            filter: `user_id=eq.${user.id}`
+          },
+          (payload) => {
+            console.log('Received profile update notification:', payload);
+            
+            // Check if it's a role change
+            if (payload.new && payload.new.update_type === 'role_change') {
+              console.log(`Role changed to: ${payload.new.new_role}`);
+              
+              // Store the current role before updating
+              const previousRole = userRole;
+              
+              // Immediately refresh the profile
+              refreshProfileInBackground(user.id);
+              
+              // Update the role immediately for a responsive UI
+              if (payload.new.new_role) {
+                setUserRoleWithPersistence(user.id, payload.new.new_role, previousRole);
+              }
+            } else {
+              // For any other profile update, just refresh the profile
+              refreshProfileInBackground(user.id);
+            }
+          }
+        )
+        .subscribe();
+      
+      return () => {
+        supabase.removeChannel(profileUpdatesSubscription);
+      };
+    }
+  }, [user?.id, authInitialized]);
+
+  // Function to clear role change notification
+  const clearRoleChangeNotification = () => {
+    setRoleChangeNotification(null);
+  };
+
   const value = {
     user,
     userRole,
@@ -931,6 +1039,9 @@ export function AuthProvider({ children }) {
     authInitialized,
     // Special admin flag that can be checked directly
     isAdminUser: user?.id === ADMIN_USER_ID || userRole === 'admin',
+    // Role change notification
+    roleChangeNotification,
+    clearRoleChangeNotification,
     // Message notification features
     unreadMessages,
     showMessageNotification,
@@ -1009,13 +1120,15 @@ export function AuthProvider({ children }) {
             // Process avatar URL
             profileData.avatar_url = processAvatarUrl(profileData.avatar_url);
             
-            // Determine user role
-            let role = 'user';
+            // IMPORTANT CHANGE: Prioritize the role from the profiles table
+            let role = profileData.role || 'user';
             
-            // Admin check
+            // Only override with admin role if specifically set in env var
             if (user.id === ADMIN_USER_ID) {
               role = 'admin';
-            } else {
+            } 
+            // Only check owner_requests if role is not already set to owner or admin
+            else if (role !== 'owner' && role !== 'admin') {
               // Check if user is an owner
               const { data: ownerData } = await supabase
                 .from('owner_requests')
@@ -1026,6 +1139,18 @@ export function AuthProvider({ children }) {
                 
               if (ownerData) {
                 role = 'owner';
+                
+                // Update the profile with owner role if needed
+                if (profileData.role !== 'owner') {
+                  const { error: updateError } = await supabase
+                    .from('profiles')
+                    .update({ role: 'owner' })
+                    .eq('id', user.id);
+                    
+                  if (updateError) {
+                    console.warn('Failed to update profile with owner role:', updateError);
+                  }
+                }
               }
             }
             
