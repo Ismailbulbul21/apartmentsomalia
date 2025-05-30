@@ -536,6 +536,7 @@ const NewListing = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   
   // Form state
   const [title, setTitle] = useState('');
@@ -546,9 +547,9 @@ const NewListing = () => {
   const [rooms, setRooms] = useState(1);
   const [bathrooms, setBathrooms] = useState(1);
   const [isFurnished, setIsFurnished] = useState(false);
+  const [isAvailable, setIsAvailable] = useState(true);
   const [images, setImages] = useState([]);
   const [primaryImageIndex, setPrimaryImageIndex] = useState(0);
-  const [uploadProgress, setUploadProgress] = useState(0);
   
   // Mogadishu districts
   const districts = [
@@ -627,7 +628,7 @@ const NewListing = () => {
           rooms: parseInt(rooms),
           bathrooms: parseInt(bathrooms),
           is_furnished: isFurnished,
-          is_available: true,
+          is_available: isAvailable,
           status: 'pending', // All new listings start with pending status
           owner_id: user.id,
           created_at: new Date().toISOString(),
@@ -843,6 +844,21 @@ const NewListing = () => {
                       />
                       <span className="ml-2 text-sm font-medium text-gray-700">Alaab leh</span>
                     </label>
+                  </div>
+                  
+                  <div className="md:col-span-2">
+                    <label className="inline-flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={isAvailable}
+                        onChange={(e) => setIsAvailable(e.target.checked)}
+                        className="h-5 w-5 text-blue-600 rounded"
+                      />
+                      <span className="ml-2 text-sm font-medium text-gray-700">Currently Available</span>
+                    </label>
+                    <p className="mt-1 text-sm text-gray-500">
+                      Check this if the apartment is ready to rent now
+                    </p>
                   </div>
                 </div>
               </div>
@@ -1401,6 +1417,23 @@ const EditListing = () => {
                     />
                     <span className="ml-2 text-sm font-medium text-gray-700">Alaab leh</span>
                   </label>
+                </div>
+              </div>
+              
+              <div className="flex items-end">
+                <div>
+                  <label className="inline-flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={isAvailable}
+                      onChange={(e) => setIsAvailable(e.target.checked)}
+                      className="h-5 w-5 text-blue-600 rounded"
+                    />
+                    <span className="ml-2 text-sm font-medium text-gray-700">Currently Available</span>
+                  </label>
+                  <p className="mt-1 text-sm text-gray-500">
+                    Check this if the apartment is ready to rent now
+                  </p>
                 </div>
               </div>
             </div>
