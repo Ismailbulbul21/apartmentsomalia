@@ -2,6 +2,41 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import LoadingSpinner from '../ui/LoadingSpinner';
 
+// Utility function to get image URL from storage path
+const getImageUrl = (path) => {
+  if (!path) {
+    return 'https://via.placeholder.com/150x150/cccccc/666666?text=No+Image';
+  }
+  
+  // If it's already a complete URL (for demo/sample data)
+  if (path.startsWith('http://') || path.startsWith('https://')) {
+    return path;
+  } 
+  
+  // For storage paths
+  try {
+    // Handle different path formats
+    let normalizedPath = path;
+    
+    if (path.includes('apartment_images/')) {
+      // If the path includes the bucket name already, extract just the path part
+      normalizedPath = path.split('apartment_images/')[1];
+    } else if (!path.includes('/')) {
+      // If it's just a filename, assume it's in the apartments folder
+      normalizedPath = `apartments/${path}`;
+    }
+    
+    const { data } = supabase.storage
+      .from('apartment_images')
+      .getPublicUrl(normalizedPath);
+    
+    return data.publicUrl;
+  } catch (error) {
+    console.error('Error generating image URL:', error, path);
+    return 'https://via.placeholder.com/150x150/cccccc/666666?text=No+Image';
+  }
+};
+
 const AllListings = () => {
   const [apartments, setApartments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -305,10 +340,27 @@ const AllListings = () => {
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {apartments.map((apartment) => {
-                // Get the primary image, or the first image, or a placeholder
-                const primaryImage = apartment.apartment_images?.find(img => img.is_primary);
-                const firstImage = apartment.apartment_images?.[0];
-                const imageUrl = primaryImage?.storage_path || firstImage?.storage_path || '/placeholder-apartment.jpg';
+                // Handle both RPC function data and fallback query data
+                let imageUrl;
+                
+                if (apartment.primary_image_path) {
+                  // RPC function data - use primary_image_path directly
+                  imageUrl = getImageUrl(apartment.primary_image_path);
+                } else if (apartment.apartment_images && apartment.apartment_images.length > 0) {
+                  // Fallback query data - use apartment_images array
+                  const primaryImage = apartment.apartment_images.find(img => img.is_primary);
+                  const firstImage = apartment.apartment_images[0];
+                  
+                  if (primaryImage?.storage_path) {
+                    imageUrl = getImageUrl(primaryImage.storage_path);
+                  } else if (firstImage?.storage_path) {
+                    imageUrl = getImageUrl(firstImage.storage_path);
+                  } else {
+                    imageUrl = 'https://via.placeholder.com/150x150/cccccc/666666?text=No+Image';
+                  }
+                } else {
+                  imageUrl = 'https://via.placeholder.com/150x150/cccccc/666666?text=No+Image';
+                }
                 
                 return (
                   <tr key={apartment.id}>
@@ -320,6 +372,9 @@ const AllListings = () => {
                             src={imageUrl}
                             alt={apartment.title}
                             loading="lazy"
+                            onError={(e) => {
+                              e.target.src = 'https://via.placeholder.com/150x150/cccccc/666666?text=No+Image';
+                            }}
                           />
                         </div>
                         <div className="ml-4">
