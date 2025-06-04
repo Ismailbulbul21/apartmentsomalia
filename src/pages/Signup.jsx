@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
+import GoogleSignInButton from '../components/auth/GoogleSignInButton';
 
 export default function Signup() {
   const [fullName, setFullName] = useState('');
@@ -128,6 +129,19 @@ export default function Signup() {
           </motion.div>
         ) : (
           <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+            {/* Google Sign-in Button */}
+            <GoogleSignInButton disabled={loading} />
+            
+            {/* Divider */}
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-night-300" />
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-2 bg-white text-night-500">Or create account with email</span>
+              </div>
+            </div>
+            
             <div className="space-y-5">
               <div>
                 <label htmlFor="fullName" className="block text-sm font-medium text-night-700">

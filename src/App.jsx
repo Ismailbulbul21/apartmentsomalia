@@ -94,6 +94,7 @@ const lazyWithRetry = (componentImport) => {
 const Home = lazyWithRetry(() => import('./pages/Home'));
 const Login = lazyWithRetry(() => import('./pages/Login'));
 const Signup = lazyWithRetry(() => import('./pages/Signup'));
+const AuthCallback = lazyWithRetry(() => import('./pages/AuthCallback'));
 const ApartmentDetail = lazyWithRetry(() => import('./pages/ApartmentDetail'));
 const OwnerDashboard = lazyWithRetry(() => import('./pages/OwnerDashboard'));
 const AdminDashboard = lazyWithRetry(() => import('./pages/AdminDashboard'));
@@ -167,6 +168,7 @@ function App() {
                     <Route path="/" element={<Home />} />
                     <Route path="/login" element={<Login />} />
                     <Route path="/signup" element={<Signup />} />
+                    <Route path="/auth/callback" element={<AuthCallback />} />
                     <Route path="/apartments/:id" element={<ApartmentDetail />} />
                     <Route path="/contact" element={<Contact />} />
 

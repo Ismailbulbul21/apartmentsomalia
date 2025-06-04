@@ -185,12 +185,98 @@ export function AuthProvider({ children }) {
     return getProfileImageUrl(url);
   };
 
+  // Function to create a profile for OAuth users
+  const createProfileForOAuthUser = async (user) => {
+    try {
+      console.log('Creating profile for OAuth user:', user.id);
+      console.log('User metadata:', user.user_metadata);
+      console.log('App metadata:', user.app_metadata);
+      
+      // Extract user data from OAuth provider
+      const userData = user.user_metadata || {};
+      const fullName = userData.full_name || userData.name || 'User';
+      const avatarUrl = userData.avatar_url || userData.picture || null;
+      
+      console.log('Extracted data:', {
+        fullName,
+        avatarUrl,
+        userDataKeys: Object.keys(userData)
+      });
+      
+      const profileToInsert = {
+        id: user.id,
+        full_name: fullName,
+        avatar_url: avatarUrl,
+        role: 'user',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      
+      console.log('Profile to insert:', profileToInsert);
+      
+      // Create profile in database
+      const { data: newProfile, error: createError } = await supabase
+        .from('profiles')
+        .insert(profileToInsert)
+        .select()
+        .single();
+      
+      if (createError) {
+        console.error('Error creating OAuth user profile:', createError);
+        console.log('Create error details:', {
+          code: createError.code,
+          message: createError.message,
+          details: createError.details
+        });
+        
+        // Return a default profile even if database insert fails
+        const fallbackProfile = {
+          id: user.id,
+          full_name: fullName,
+          avatar_url: processAvatarUrl(avatarUrl),
+          role: 'user',
+          created_at: new Date().toISOString()
+        };
+        console.log('Returning fallback profile:', fallbackProfile);
+        return fallbackProfile;
+      }
+      
+      // Process avatar URL
+      newProfile.avatar_url = processAvatarUrl(newProfile.avatar_url);
+      
+      console.log('Successfully created profile for OAuth user:', newProfile);
+      return newProfile;
+    } catch (error) {
+      console.error('Error in createProfileForOAuthUser:', error);
+      // Return a minimal profile as fallback
+      const minimalProfile = {
+        id: user.id,
+        full_name: user.user_metadata?.full_name || user.user_metadata?.name || 'User',
+        avatar_url: processAvatarUrl(user.user_metadata?.avatar_url || user.user_metadata?.picture),
+        role: 'user',
+        created_at: new Date().toISOString()
+      };
+      console.log('Returning minimal profile:', minimalProfile);
+      return minimalProfile;
+    }
+  };
+
   // Function to fetch user profile and role
   const fetchUserProfile = async (userId, retryAttempt = 0) => {
     const maxRetries = 2; // Maximum number of retry attempts
     
     try {
       console.log('Fetching profile for user:', userId);
+      console.log('Retry attempt:', retryAttempt);
+      
+      // Check current authentication state first
+      const { data: { user: currentUser }, error: authError } = await supabase.auth.getUser();
+      console.log('Current auth state:', {
+        currentUserId: currentUser?.id,
+        targetUserId: userId,
+        authError: authError?.message,
+        isAuthenticated: !!currentUser
+      });
       
       // Check localStorage first for quick loading
       const cachedRole = getRoleFromLocalStorage(userId);
@@ -247,14 +333,116 @@ export function AuthProvider({ children }) {
       }
       
       // For normal users, fetch profile and determine role
+      console.log('Attempting to fetch profile from database...');
+      
+      // Ensure we have proper authentication context before querying
+      if (!currentUser || currentUser.id !== userId) {
+        console.warn('Authentication context mismatch, waiting for proper auth state...');
+        
+        // Wait a bit and try to get the user again
+        await new Promise(resolve => setTimeout(resolve, 500));
+        const { data: { user: retryUser } } = await supabase.auth.getUser();
+        
+        if (!retryUser || retryUser.id !== userId) {
+          console.error('Still no proper authentication context after retry');
+          
+          // If we have cached data, use it
+          if (cachedProfile) {
+            console.log('Using cached profile due to auth context issues');
+            return cachedProfile;
+          }
+          
+          // Otherwise return a basic profile
+          return {
+            id: userId,
+            role: cachedRole || 'user',
+            created_at: new Date().toISOString()
+          };
+        }
+        
+        console.log('Authentication context established after retry');
+      }
+      
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .single();
       
+      console.log('Database query result:', {
+        hasData: !!profileData,
+        error: profileError?.message,
+        errorCode: profileError?.code
+      });
+      
       if (profileError) {
         console.error('Error fetching profile:', profileError);
+        console.log('Profile error details:', {
+          code: profileError.code,
+          message: profileError.message,
+          details: profileError.details
+        });
+        
+        // Check if this is a "not found" error (profile doesn't exist)
+        if (profileError.code === 'PGRST116' || profileError.message.includes('No rows returned')) {
+          console.log('Profile not found, checking if this is an OAuth user');
+          
+          // Get the current user to check if they're an OAuth user
+          const { data: { user: currentUser }, error: userError } = await supabase.auth.getUser();
+          
+          if (userError) {
+            console.error('Error getting current user:', userError);
+          } else {
+            console.log('Current user data:', {
+              id: currentUser?.id,
+              email: currentUser?.email,
+              app_metadata: currentUser?.app_metadata,
+              user_metadata: currentUser?.user_metadata
+            });
+          }
+          
+          if (currentUser && currentUser.id === userId) {
+            // Check if this user signed up via OAuth (has provider data)
+            const provider = currentUser.app_metadata?.provider;
+            const isOAuthUser = provider && provider !== 'email';
+            
+            console.log('OAuth detection:', {
+              provider,
+              isOAuthUser,
+              hasUserMetadata: !!currentUser.user_metadata,
+              userMetadataKeys: Object.keys(currentUser.user_metadata || {})
+            });
+            
+            if (isOAuthUser) {
+              console.log('OAuth user detected, creating profile');
+              try {
+                const newProfile = await createProfileForOAuthUser(currentUser);
+                console.log('Profile creation result:', newProfile);
+                
+                // Save to localStorage
+                saveProfileToLocalStorage(userId, newProfile);
+                
+                return newProfile;
+              } catch (createError) {
+                console.error('Error creating OAuth profile:', createError);
+                // Return a basic profile even if creation fails
+                return {
+                  id: userId,
+                  full_name: currentUser.user_metadata?.full_name || currentUser.user_metadata?.name || 'User',
+                  avatar_url: processAvatarUrl(currentUser.user_metadata?.avatar_url || currentUser.user_metadata?.picture),
+                  role: 'user',
+                  created_at: new Date().toISOString()
+                };
+              }
+            } else {
+              console.log('Not an OAuth user, provider:', provider);
+            }
+          } else {
+            console.log('User ID mismatch or no current user');
+          }
+        } else {
+          console.log('Profile error is not a "not found" error');
+        }
         
         // If we've already tried a few times, just return what we have
         if (retryAttempt >= maxRetries) {
@@ -284,6 +472,8 @@ export function AuthProvider({ children }) {
       }
       
       if (profileData) {
+        console.log('Profile found in database:', profileData);
+        
         // Get avatar URL if present
         profileData.avatar_url = processAvatarUrl(profileData.avatar_url);
         
@@ -334,6 +524,8 @@ export function AuthProvider({ children }) {
           ...profileData,
           role
         };
+        
+        console.log('Final profile with role:', profileWithRole);
         
         // Save to localStorage for next time
         saveProfileToLocalStorage(userId, profileWithRole);
@@ -541,25 +733,33 @@ export function AuthProvider({ children }) {
             setUserRoleWithPersistence(session.user.id, cachedProfile.role || 'user');
           }
           
-          // Fetch fresh profile data (will use cache if available)
-          try {
-            const profile = await fetchUserProfile(session.user.id);
-            
-            if (profile) {
-              setUserRoleWithPersistence(session.user.id, profile.role || 'user');
-              // Store the full profile data for access across components
-              setUserProfile(profile);
-              console.log('Initial profile data:', profile);
-            } else {
+          // For OAuth users, add a small delay to ensure authentication is fully established
+          const isOAuthUser = session.user.app_metadata?.provider && session.user.app_metadata.provider !== 'email';
+          const delay = isOAuthUser ? 1000 : 0; // 1 second delay for OAuth users
+          
+          console.log('Sign-in detected:', {
+            id: session.user.id,
+            isOAuth: isOAuthUser,
+            provider: session.user.app_metadata?.provider,
+            delayBeforeProfileFetch: delay
+          });
+          
+          // Fetch profile data with delay for OAuth users
+          setTimeout(async () => {
+            try {
+              const profile = await fetchUserProfile(session.user.id);
+              if (profile) {
+                setUserRoleWithPersistence(session.user.id, profile.role || 'user');
+                setUserProfile(profile);
+              } else {
+                setUserRoleWithPersistence(session.user.id, 'user');
+              }
+            } catch (error) {
+              console.error('Error fetching profile on sign-in:', error);
+              // Default to user role if profile fetch fails
               setUserRoleWithPersistence(session.user.id, 'user');
             }
-          } catch (profileError) {
-            console.error('Profile fetch error:', profileError);
-            // Still mark as initialized but with default role
-            if (!userRole) {
-              setUserRoleWithPersistence(session.user.id, 'user');
-            }
-          }
+          }, delay);
         } else {
           // No active session
           setUser(null);
@@ -615,20 +815,33 @@ export function AuthProvider({ children }) {
             setUserRoleWithPersistence(session.user.id, cachedProfile.role || 'user');
           }
           
-          // Fetch profile data
-          try {
-            const profile = await fetchUserProfile(session.user.id);
-            if (profile) {
-              setUserRoleWithPersistence(session.user.id, profile.role || 'user');
-              setUserProfile(profile);
-            } else {
+          // For OAuth users, add a small delay to ensure authentication is fully established
+          const isOAuthUser = session.user.app_metadata?.provider && session.user.app_metadata.provider !== 'email';
+          const delay = isOAuthUser ? 1000 : 0; // 1 second delay for OAuth users
+          
+          console.log('Sign-in detected:', {
+            id: session.user.id,
+            isOAuth: isOAuthUser,
+            provider: session.user.app_metadata?.provider,
+            delayBeforeProfileFetch: delay
+          });
+          
+          // Fetch profile data with delay for OAuth users
+          setTimeout(async () => {
+            try {
+              const profile = await fetchUserProfile(session.user.id);
+              if (profile) {
+                setUserRoleWithPersistence(session.user.id, profile.role || 'user');
+                setUserProfile(profile);
+              } else {
+                setUserRoleWithPersistence(session.user.id, 'user');
+              }
+            } catch (error) {
+              console.error('Error fetching profile on sign-in:', error);
+              // Default to user role if profile fetch fails
               setUserRoleWithPersistence(session.user.id, 'user');
             }
-          } catch (error) {
-            console.error('Error fetching profile on sign-in:', error);
-            // Default to user role if profile fetch fails
-            setUserRoleWithPersistence(session.user.id, 'user');
-          }
+          }, delay);
         } else if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
           // User signed out or was deleted
           console.log('User signed out or deleted');
@@ -749,6 +962,47 @@ export function AuthProvider({ children }) {
       if (error) throw error;
       return { success: true, data };
     } catch (error) {
+      return { success: false, error: error.message };
+    }
+  };
+
+  // Google Sign-in function
+  const signInWithGoogle = async () => {
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
+        }
+      });
+      
+      if (error) throw error;
+      return { success: true, data };
+    } catch (error) {
+      console.error('Google sign-in error:', error);
+      return { success: false, error: error.message };
+    }
+  };
+
+  // Handle OAuth callback
+  const handleAuthCallback = async () => {
+    try {
+      const { data, error } = await supabase.auth.getSession();
+      
+      if (error) throw error;
+      
+      if (data.session) {
+        // Session is already handled by the auth state change listener
+        return { success: true, session: data.session };
+      }
+      
+      return { success: false, error: 'No session found' };
+    } catch (error) {
+      console.error('Auth callback error:', error);
       return { success: false, error: error.message };
     }
   };
@@ -1030,6 +1284,8 @@ export function AuthProvider({ children }) {
     loading,
     login,
     signup,
+    signInWithGoogle,
+    handleAuthCallback,
     logout,
     becomeOwner,
     isAdmin,
@@ -1099,82 +1355,81 @@ export function AuthProvider({ children }) {
           if (profileError) {
             console.error('Error fetching profile directly:', profileError);
             
-            // Check if we already have a profile before falling back
-            if (userProfile) {
-              console.log('Using existing profile as fallback');
-              return userProfile;
-            }
-            
-            // Fall back to fetchUserProfile if direct query fails
-            const profile = await fetchUserProfile(user.id);
-            if (profile) {
-              setUserProfile(profile);
-              setUserRoleWithPersistence(user.id, profile.role || 'user');
-              return profile;
-            }
-            return null;
-          }
-          
-          // If we have profile data, determine role
-          if (profileData) {
-            // Process avatar URL
-            profileData.avatar_url = processAvatarUrl(profileData.avatar_url);
-            
-            // IMPORTANT CHANGE: Prioritize the role from the profiles table
-            let role = profileData.role || 'user';
-            
-            // Only override with admin role if specifically set in env var
-            if (user.id === ADMIN_USER_ID) {
-              role = 'admin';
-            } 
-            // Only check owner_requests if role is not already set to owner or admin
-            else if (role !== 'owner' && role !== 'admin') {
-              // Check if user is an owner
-              const { data: ownerData } = await supabase
-                .from('owner_requests')
-                .select('status')
-                .eq('user_id', user.id)
-                .eq('status', 'approved')
-                .maybeSingle();
-                
-              if (ownerData) {
-                role = 'owner';
-                
-                // Update the profile with owner role if needed
-                if (profileData.role !== 'owner') {
-                  const { error: updateError } = await supabase
-                    .from('profiles')
-                    .update({ role: 'owner' })
-                    .eq('id', user.id);
-                    
-                  if (updateError) {
-                    console.warn('Failed to update profile with owner role:', updateError);
-                  }
-                }
+            // Check if this is a "not found" error (profile doesn't exist)
+            if (profileError.code === 'PGRST116' || profileError.message.includes('No rows returned')) {
+              console.log('Profile not found, checking if this is an OAuth user');
+              
+              // Get the current user to check if they're an OAuth user
+              const { data: { user: currentUser }, error: userError } = await supabase.auth.getUser();
+              
+              if (userError) {
+                console.error('Error getting current user:', userError);
+              } else {
+                console.log('Current user data:', {
+                  id: currentUser?.id,
+                  email: currentUser?.email,
+                  app_metadata: currentUser?.app_metadata,
+                  user_metadata: currentUser?.user_metadata
+                });
               }
+              
+              if (currentUser && currentUser.id === user.id) {
+                // Check if this user signed up via OAuth (has provider data)
+                const provider = currentUser.app_metadata?.provider;
+                const isOAuthUser = provider && provider !== 'email';
+                
+                console.log('OAuth detection:', {
+                  provider,
+                  isOAuthUser,
+                  hasUserMetadata: !!currentUser.user_metadata,
+                  userMetadataKeys: Object.keys(currentUser.user_metadata || {})
+                });
+                
+                if (isOAuthUser) {
+                  console.log('OAuth user detected, creating profile');
+                  try {
+                    const newProfile = await createProfileForOAuthUser(currentUser);
+                    console.log('Profile creation result:', newProfile);
+                    
+                    // Save to localStorage
+                    saveProfileToLocalStorage(user.id, newProfile);
+                    
+                    return newProfile;
+                  } catch (createError) {
+                    console.error('Error creating OAuth profile:', createError);
+                    // Return a basic profile even if creation fails
+                    return {
+                      id: user.id,
+                      full_name: currentUser.user_metadata?.full_name || currentUser.user_metadata?.name || 'User',
+                      avatar_url: processAvatarUrl(currentUser.user_metadata?.avatar_url || currentUser.user_metadata?.picture),
+                      role: 'user',
+                      created_at: new Date().toISOString()
+                    };
+                  }
+                } else {
+                  console.log('Not an OAuth user, provider:', provider);
+                }
+              } else {
+                console.log('User ID mismatch or no current user');
+              }
+            } else {
+              console.log('Profile error is not a "not found" error');
             }
-            
-            // Create the full profile object
-            const fullProfile = {
-              ...profileData,
-              role
-            };
-            
-            // Update states
-            console.log('Updated profile:', fullProfile);
-            setUserRoleWithPersistence(user.id, role);
-            setUserProfile(fullProfile);
-            
-            // Update localStorage cache
-            saveProfileToLocalStorage(user.id, fullProfile);
-            
-            // Also refresh other related states
-            await checkOwnerStatus();
-            await checkUnreadMessages();
-            
-            return fullProfile;
           }
           
+          // Check if we already have a profile before falling back
+          if (userProfile) {
+            console.log('Using existing profile as fallback');
+            return userProfile;
+          }
+          
+          // Fall back to fetchUserProfile if direct query fails
+          const profile = await fetchUserProfile(user.id);
+          if (profile) {
+            setUserProfile(profile);
+            setUserRoleWithPersistence(user.id, profile.role || 'user');
+            return profile;
+          }
           return null;
         } catch (err) {
           console.error('Error refreshing user profile:', err);

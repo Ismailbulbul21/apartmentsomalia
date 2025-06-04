@@ -155,12 +155,8 @@ const ApartmentCard = memo(({ apartment }) => {
   
   return (
     <motion.div 
-      className={`modern-card text-white shadow-lg border overflow-hidden rounded-xl ${
-        apartment.is_available 
-          ? 'bg-night-900 border-night-700 hover:shadow-xl' 
-          : 'bg-night-800 border-night-600 opacity-90'
-      }`}
-      whileHover={{ y: apartment.is_available ? -5 : -2, boxShadow: apartment.is_available ? "0 25px 50px -12px rgba(0, 0, 0, 0.6)" : "0 15px 35px -12px rgba(0, 0, 0, 0.4)" }}
+      className={`modern-card text-white shadow-lg border overflow-hidden rounded-xl bg-night-900 border-night-700 hover:shadow-xl`}
+      whileHover={{ y: -5, boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.6)" }}
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
@@ -173,11 +169,6 @@ const ApartmentCard = memo(({ apartment }) => {
             className="h-48 w-full"
           />
         </Link>
-        
-        {/* Overlay for unavailable apartments */}
-        {!apartment.is_available && (
-          <div className="absolute inset-0 bg-night-900 bg-opacity-40"></div>
-        )}
         
         <div className="absolute top-0 right-0 m-3">
           <span className="bg-primary-500 text-white text-xs font-bold px-2.5 py-1 rounded-md">
@@ -195,40 +186,32 @@ const ApartmentCard = memo(({ apartment }) => {
       
       <div className="p-5">
         <Link to={`/apartments/${apartment.id}`} className="block">
-          <h3 className={`text-lg font-semibold line-clamp-1 mb-2 ${
-            apartment.is_available ? 'text-white' : 'text-night-200'
-          }`}>
+          <h3 className="text-lg font-semibold line-clamp-1 mb-2 text-white">
             {apartment.title}
           </h3>
-          <p className={`text-sm mb-4 line-clamp-2 ${
-            apartment.is_available ? 'text-night-300' : 'text-night-400'
-          }`}>
+          <p className="text-sm mb-4 line-clamp-2 text-night-300">
             {apartment.location_description}
           </p>
         </Link>
         
         <div className="flex justify-between items-center">
           <div className="flex items-center space-x-3 text-xs text-night-300">
-            <div className={`flex items-center px-2 py-1 rounded-md ${
-              apartment.is_available ? 'bg-night-800' : 'bg-night-700'
-            }`}>
+            <div className="flex items-center px-2 py-1 rounded-md bg-night-800">
               <svg className="w-4 h-4 mr-1 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
               </svg>
               <span>{apartment.rooms}</span>
             </div>
-            <div className={`flex items-center px-2 py-1 rounded-md ${
-              apartment.is_available ? 'bg-night-800' : 'bg-night-700'
-            }`}>
-              <svg className="w-4 h-4 mr-1 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+            <div className="flex items-center px-2 py-1 rounded-md bg-night-800">
+              {/* Toilet/Restroom icon for bathrooms */}
+              <svg className="w-4 h-4 mr-1 text-primary-400" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M9 2v1h6V2a1 1 0 0 1 2 0v1h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v10a3 3 0 0 1-3 3H10a3 3 0 0 1-3-3V8H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h1V2a1 1 0 0 1 2 0zm0 6v10a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1V8H9zm8-2V5H7v1h10z"/>
+                <circle cx="12" cy="14" r="1"/>
               </svg>
               <span>{apartment.bathrooms}</span>
             </div>
             {apartment.is_furnished && (
-              <div className={`flex items-center px-2 py-1 rounded-md ${
-                apartment.is_available ? 'bg-night-800' : 'bg-night-700'
-              }`}>
+              <div className="flex items-center px-2 py-1 rounded-md bg-night-800">
                 <svg className="w-4 h-4 mr-1 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                 </svg>
@@ -237,6 +220,16 @@ const ApartmentCard = memo(({ apartment }) => {
             )}
           </div>
         </div>
+        
+        {/* Owner name */}
+        {apartment.owner && apartment.owner.full_name && (
+          <div className="mt-3 flex items-center text-xs text-night-400">
+            <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+            </svg>
+            <span>Milkiile: {apartment.owner.full_name}</span>
+          </div>
+        )}
         
         {/* Availability Status Badge */}
         <div className="mt-3">
