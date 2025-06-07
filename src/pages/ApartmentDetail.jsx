@@ -7,20 +7,15 @@ import LoadingSpinner from '../components/ui/LoadingSpinner';
 
 // Utility function to get image URL from storage path
 const getImageUrl = (path) => {
-  // Handle null, undefined, or empty strings
   if (!path || path.trim() === '') {
-    console.log('Empty or null path provided to getImageUrl, using placeholder');
     return '/images/placeholder-apartment.svg';
   }
   
-  // If it's already a complete URL
   if (path.startsWith('http://') || path.startsWith('https://')) {
     return path;
   } 
   
-  // For storage paths
   try {
-    // Handle different path formats
     let normalizedPath = path.trim();
     
     if (normalizedPath.includes('apartment_images/')) {
@@ -29,9 +24,7 @@ const getImageUrl = (path) => {
       normalizedPath = `apartments/${normalizedPath}`;
     }
     
-    // Make sure we don't pass an empty string to Supabase
     if (!normalizedPath || normalizedPath === '') {
-      console.log('Normalized path is empty, using placeholder');
       return '/images/placeholder-apartment.svg';
     }
     
@@ -39,11 +32,9 @@ const getImageUrl = (path) => {
       .from('apartment_images')
       .getPublicUrl(normalizedPath);
     
-    // Make sure we have a valid URL before returning
     if (data && data.publicUrl && data.publicUrl.trim() !== '') {
       return data.publicUrl;
     } else {
-      console.log('No valid publicUrl found in Supabase response, using placeholder');
       return '/images/placeholder-apartment.svg';
     }
   } catch (error) {
@@ -57,7 +48,6 @@ const ImageViewerModal = ({ images, activeIndex, onClose, onPrev, onNext }) => {
   const [touchStart, setTouchStart] = useState(null);
   const [touchEnd, setTouchEnd] = useState(null);
   
-  // Handle swipe gestures
   const handleTouchStart = (e) => {
     setTouchStart(e.targetTouches[0].clientX);
   };
@@ -85,7 +75,6 @@ const ImageViewerModal = ({ images, activeIndex, onClose, onPrev, onNext }) => {
     setTouchEnd(null);
   };
   
-  // Handle keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') onClose();
@@ -97,7 +86,6 @@ const ImageViewerModal = ({ images, activeIndex, onClose, onPrev, onNext }) => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClose, onPrev, onNext]);
   
-  // Prevent body scroll when modal is open
   useEffect(() => {
     document.body.style.overflow = 'hidden';
     return () => {
@@ -123,7 +111,6 @@ const ImageViewerModal = ({ images, activeIndex, onClose, onPrev, onNext }) => {
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       >
-        {/* Close button */}
         <button 
           className="absolute top-4 right-4 z-10 text-white bg-black bg-opacity-50 rounded-full p-2"
           onClick={onClose}
@@ -133,7 +120,6 @@ const ImageViewerModal = ({ images, activeIndex, onClose, onPrev, onNext }) => {
           </svg>
         </button>
         
-        {/* Main image */}
         <div 
           className="relative w-full h-full flex items-center justify-center p-4"
           onClick={(e) => e.stopPropagation()}
@@ -149,7 +135,6 @@ const ImageViewerModal = ({ images, activeIndex, onClose, onPrev, onNext }) => {
           />
         </div>
         
-        {/* Navigation buttons */}
         {images.length > 1 && (
           <>
             <button 
@@ -169,7 +154,6 @@ const ImageViewerModal = ({ images, activeIndex, onClose, onPrev, onNext }) => {
               </svg>
             </button>
             
-            {/* Image counter */}
             <div className="absolute bottom-4 left-0 right-0 text-center text-white text-sm">
               {activeIndex + 1} / {images.length}
             </div>
@@ -184,44 +168,15 @@ export default function ApartmentDetail() {
   const { id } = useParams();
   const { user } = useAuth();
   const [apartment, setApartment] = useState(null);
+  const [apartmentFloors, setApartmentFloors] = useState([]);
   const [owner, setOwner] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [reviews, setReviews] = useState([]);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [showImageViewer, setShowImageViewer] = useState(false);
-  const [toggleLoading, setToggleLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const navigate = useNavigate();
-
-  // Quick toggle availability function for owners
-  const handleToggleAvailability = async () => {
-    if (!user || user.id !== apartment.owner_id) return;
-    
-    try {
-      setToggleLoading(true);
-      
-      const newAvailability = !apartment.is_available;
-      
-      const { error } = await supabase
-        .from('apartments')
-        .update({ is_available: newAvailability })
-        .eq('id', apartment.id);
-      
-      if (error) throw error;
-      
-      // Update local state immediately
-      setApartment(prev => ({
-        ...prev,
-        is_available: newAvailability
-      }));
-      
-    } catch (error) {
-      console.error('Error updating availability:', error);
-      alert('Failed to update availability. Please try again.');
-    } finally {
-      setToggleLoading(false);
-    }
-  };
 
   // Fetch apartment data
   useEffect(() => {
@@ -229,11 +184,6 @@ export default function ApartmentDetail() {
       try {
         setLoading(true);
         
-        // Fetch apartment with images only
-        console.log(`Fetching apartment with ID: ${id}`);
-        
-        try {
-          // First try with the relationship query
           const { data: apartmentData, error: apartmentError } = await supabase
             .from('apartments')
             .select(`
@@ -244,124 +194,78 @@ export default function ApartmentDetail() {
             .eq('status', 'approved')
             .single();
           
-          if (apartmentError) {
-            console.error('Error fetching apartment data:', apartmentError);
-            throw apartmentError;
-          }
-          
-          if (!apartmentData) {
-            console.error('No apartment data found for ID:', id);
-            throw new Error('Apartment not found');
-          }
-          
-          console.log('Apartment data:', apartmentData);
-          console.log('Apartment images data:', apartmentData.apartment_images);
-          
-          // If apartment_images is undefined, try fetching them separately
+        if (apartmentError) throw apartmentError;
+        if (!apartmentData) throw new Error('Apartment not found');
+        
+        // Process images
           if (!apartmentData.apartment_images) {
-            console.log('No apartment_images in original query, fetching separately...');
-            
-            // Fetch images separately as a fallback
-            const { data: imagesData, error: imagesError } = await supabase
+          const { data: imagesData } = await supabase
               .from('apartment_images')
               .select('*')
               .eq('apartment_id', id);
-              
-            if (!imagesError && imagesData && imagesData.length > 0) {
-              console.log('Successfully fetched images separately:', imagesData);
-              apartmentData.apartment_images = imagesData;
-            } else {
-              console.log('No images found in separate query or error:', imagesError);
-              // Initialize as empty array to prevent undefined errors
-              apartmentData.apartment_images = [];
-            }
-          }
-          
-          // Validate image data
-          if (apartmentData.apartment_images) {
-            // Filter out any invalid images
-            apartmentData.apartment_images = apartmentData.apartment_images.filter(img => img && img.storage_path && img.storage_path.trim() !== '');
-            console.log('Filtered apartment images:', apartmentData.apartment_images);
-          } else {
-            // Initialize as empty array to prevent undefined errors
-            apartmentData.apartment_images = [];
-          }
-          
-          // Set the apartment data
+          apartmentData.apartment_images = imagesData || [];
+        }
+        
+        apartmentData.apartment_images = apartmentData.apartment_images.filter(img => 
+          img && img.storage_path && img.storage_path.trim() !== ''
+        );
+        
           setApartment(apartmentData);
           
-          // Now fetch the owner profile separately
+        // Fetch floor data - all apartments now have floors
+        const { data: floorsData, error: floorsError } = await supabase
+          .from('apartment_floors')
+          .select('*')
+          .eq('apartment_id', id)
+          .order('floor_number', { ascending: true });
+          
+        if (!floorsError && floorsData) {
+          setApartmentFloors(floorsData);
+        }
+        
+        // Fetch owner
           if (apartmentData.owner_id) {
-            try {
-              const { data: ownerData, error: ownerError } = await supabase
+          const { data: ownerData } = await supabase
                 .from('profiles')
                 .select('id, full_name, business_name, whatsapp_number, business_phone')
                 .eq('id', apartmentData.owner_id)
                 .single();
                 
-              if (!ownerError && ownerData) {
-                setOwner(ownerData);
-              } else {
-                console.error('Error fetching owner:', ownerError);
-              }
-            } catch (ownerError) {
-              console.error('Failed to fetch owner data:', ownerError);
-            }
-          }
-        } catch (fetchError) {
-          console.error('Failed to fetch apartment data:', fetchError);
-          throw fetchError;
+          if (ownerData) setOwner(ownerData);
         }
         
-        // Fetch reviews only after we've set the apartment data
-        try {
-          const { data: reviewsData, error: reviewsError } = await supabase
+        // Fetch reviews
+        const { data: reviewsData } = await supabase
             .from('reviews')
             .select('*')
             .eq('apartment_id', id)
             .order('created_at', { ascending: false });
-          
-          if (reviewsError) throw reviewsError;
         
         if (reviewsData && reviewsData.length > 0) {
-          // Fetch user profiles for reviews
           const userIds = [...new Set(reviewsData.map(review => review.user_id))];
           
-          const { data: userProfiles, error: profilesError } = await supabase
+          const { data: userProfiles } = await supabase
             .from('profiles')
             .select('id, full_name')
             .in('id', userIds);
             
-          if (!profilesError && userProfiles) {
-            // Map profiles to reviews
-            const profileMap = userProfiles.reduce((map, profile) => {
-              map[profile.id] = profile;
-              return map;
-            }, {});
-            
-            // Fetch review replies
-            const { data: repliesData, error: repliesError } = await supabase
+          const { data: repliesData } = await supabase
               .from('review_replies')
               .select('*')
               .in('review_id', reviewsData.map(r => r.id));
               
-            // Combine reviews with profiles and replies
+          const profileMap = (userProfiles || []).reduce((map, profile) => {
+            map[profile.id] = profile;
+            return map;
+          }, {});
+          
             const enrichedReviews = reviewsData.map(review => ({
               ...review,
               profiles: profileMap[review.user_id] || null,
-              review_replies: !repliesError ? repliesData.filter(reply => reply.review_id === review.id) : []
+            review_replies: (repliesData || []).filter(reply => reply.review_id === review.id)
             }));
             
             setReviews(enrichedReviews);
-          } else {
-            setReviews(reviewsData);
-          }
-        } else {
-          setReviews([]);
-        }
-        } catch (reviewError) {
-          console.error('Error fetching reviews:', reviewError);
-          setReviews([]);
         }
       } catch (error) {
         console.error('Error fetching apartment:', error);
@@ -374,7 +278,82 @@ export default function ApartmentDetail() {
     fetchApartment();
   }, [id]);
 
-  // Handle navigation to the messages tab in user profile
+  // Add listener to refresh data when page becomes visible again
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        // Page became visible, refresh apartment and floor data
+        const refreshData = async () => {
+          try {
+            // Refresh apartment data
+            const { data: apartmentData } = await supabase
+              .from('apartments')
+              .select('is_available')
+              .eq('id', id)
+              .single();
+              
+            if (apartmentData) {
+              setApartment(prev => ({ ...prev, is_available: apartmentData.is_available }));
+            }
+            
+            // Refresh floor data
+            const { data: floorsData } = await supabase
+              .from('apartment_floors')
+              .select('*')
+              .eq('apartment_id', id)
+              .order('floor_number', { ascending: true });
+              
+            if (floorsData) {
+              setApartmentFloors(floorsData);
+            }
+          } catch (error) {
+            console.error('Error refreshing data:', error);
+          }
+        };
+        
+        refreshData();
+      }
+    };
+
+    const handleFocus = () => {
+      // Page gained focus, refresh data
+      handleVisibilityChange();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [id]);
+
+  // Add periodic refresh every 30 seconds when page is visible
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      if (!document.hidden) {
+        try {
+          // Refresh floor data
+          const { data: floorsData } = await supabase
+            .from('apartment_floors')
+            .select('*')
+            .eq('apartment_id', id)
+            .order('floor_number', { ascending: true });
+            
+          if (floorsData) {
+            setApartmentFloors(floorsData);
+          }
+        } catch (error) {
+          console.error('Error in periodic refresh:', error);
+        }
+      }
+    }, 30000); // Refresh every 30 seconds
+
+    return () => clearInterval(interval);
+  }, [id]);
+
+  // Handle navigation to messages
   const handleNavigateToMessages = async () => {
     if (!user) {
       navigate('/login', { state: { from: `/apartments/${id}` } });
@@ -387,7 +366,6 @@ export default function ApartmentDetail() {
     }
     
     try {
-      // First generate a conversation ID if needed
       const { data: convData, error: convError } = await supabase.rpc('generate_conversation_id', {
         p_user_id_1: user.id,
         p_user_id_2: owner.id,
@@ -396,7 +374,6 @@ export default function ApartmentDetail() {
       
       if (convError) throw convError;
       
-      // Navigate to the profile messages tab
       navigate('/profile', { 
         state: { 
           activeTab: 'messages',
@@ -409,22 +386,95 @@ export default function ApartmentDetail() {
     }
   };
 
+  // Manual refresh function
+  const handleManualRefresh = async () => {
+    try {
+      setRefreshing(true);
+      
+      // Refresh apartment data
+      const { data: apartmentData } = await supabase
+        .from('apartments')
+        .select('is_available')
+        .eq('id', id)
+        .single();
+        
+      if (apartmentData) {
+        setApartment(prev => ({ ...prev, is_available: apartmentData.is_available }));
+      }
+      
+      // Refresh floor data
+      const { data: floorsData } = await supabase
+        .from('apartment_floors')
+        .select('*')
+        .eq('apartment_id', id)
+        .order('floor_number', { ascending: true });
+        
+      if (floorsData) {
+        setApartmentFloors(floorsData);
+      }
+    } catch (error) {
+      console.error('Error refreshing data:', error);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  // Handle floor status change (for owners)
+  const handleFloorStatusChange = async (floorId, newStatus) => {
+    if (!user || user.id !== apartment.owner_id) return;
+    
+    try {
+      const { error } = await supabase
+        .from('apartment_floors')
+        .update({ floor_status: newStatus })
+        .eq('id', floorId);
+      
+      if (error) throw error;
+      
+      // Update local state
+      setApartmentFloors(prev => 
+        prev.map(floor => 
+          floor.id === floorId 
+            ? { ...floor, floor_status: newStatus }
+            : floor
+        )
+      );
+    } catch (error) {
+      console.error('Error updating floor status:', error);
+      alert('Failed to update floor status. Please try again.');
+    }
+  };
+
   if (loading) {
     return (
-      <div className="flex justify-center items-center min-h-[60vh] bg-night-950">
-        <LoadingSpinner size="lg" />
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 flex items-center justify-center">
+        <div className="text-center">
+          <LoadingSpinner size="lg" />
+          <p className="mt-4 text-gray-600 text-lg font-medium">Waa la soo raraya macluumaadka guriga...</p>
+        </div>
       </div>
     );
   }
   
   if (error) {
     return (
-      <div className="bg-night-950 text-white min-h-screen py-16">
-        <div className="container mx-auto px-4">
-          <div className="bg-night-800 border border-night-700 p-6 rounded-xl text-center">
-            <h2 className="text-xl font-semibold mb-2 text-red-400">Qalad</h2>
-            <p className="text-night-300">{error}</p>
-            <Link to="/" className="mt-6 inline-block px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-lg">
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 flex items-center justify-center p-4">
+        <div className="max-w-md w-full">
+          <div className="bg-white rounded-2xl shadow-xl p-8 text-center border border-red-200">
+            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">⚠️ Qalad</h2>
+            <p className="text-gray-600 mb-6">{error}</p>
+            <Link 
+              to="/" 
+              className="inline-flex items-center px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-colors font-medium"
+            >
+              <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m0 0v11a2 2 0 01-2 2H5" />
+              </svg>
               Ku laabo Bogga Hore
             </Link>
           </div>
@@ -435,13 +485,24 @@ export default function ApartmentDetail() {
 
   if (!apartment) {
     return (
-      <div className="bg-night-950 text-white min-h-screen py-16">
-        <div className="container mx-auto px-4">
-          <div className="bg-night-800 border border-night-700 p-6 rounded-xl text-center">
-                          <h2 className="text-xl font-semibold mb-2">Guriga Lama Helin</h2>
-              <p className="text-night-300">Ma heli karno guriga aad raadineyso.</p>
-              <Link to="/" className="mt-6 inline-block px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-lg">
-                Ku laabo Bogga Hore
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 flex items-center justify-center p-4">
+        <div className="max-w-md w-full">
+          <div className="bg-white rounded-2xl shadow-xl p-8 text-center border border-gray-200">
+            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">🏠 Guriga Lama Helin</h2>
+            <p className="text-gray-600 mb-6">Ma heli karno guriga aad raadineyso.</p>
+            <Link 
+              to="/" 
+              className="inline-flex items-center px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-colors font-medium"
+            >
+              <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m0 0v11a2 2 0 01-2 2H5" />
+              </svg>
+              Ku laabo Bogga Hore
             </Link>
           </div>
         </div>
@@ -449,44 +510,26 @@ export default function ApartmentDetail() {
     );
   }
   
-  // Find primary image or first image with improved validation
+  // Process images
   let primaryImage = null;
   let firstImage = null;
   let currentImage = null;
   
-  // Make sure apartment images exists and is an array
   if (apartment.apartment_images && Array.isArray(apartment.apartment_images) && apartment.apartment_images.length > 0) {
-    console.log('Processing apartment images, count:', apartment.apartment_images.length);
-    
-    // Find primary image if it exists
     primaryImage = apartment.apartment_images.find(img => img && img.is_primary && img.storage_path && img.storage_path.trim() !== '');
-    
-    // Get first valid image
     const firstValidImage = apartment.apartment_images.find(img => img && img.storage_path && img.storage_path.trim() !== '');
     firstImage = firstValidImage || null;
     
-    // Get current image based on index, fallback to primary or first
     currentImage = activeImageIndex < apartment.apartment_images.length 
       ? apartment.apartment_images[activeImageIndex] 
       : null;
       
-    // Verify current image has a valid storage path
     if (currentImage && (!currentImage.storage_path || currentImage.storage_path.trim() === '')) {
       currentImage = null;
     }
-  } else {
-    console.log('No valid apartment images found');
   }
   
-  // Final fallback - if no valid current image, use primary or first
   currentImage = currentImage || primaryImage || firstImage;
-  
-  // Format prices and details
-  const formattedPrice = new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 0
-  }).format(apartment.price_per_month);
   
   const getAverageRating = () => {
     if (reviews.length === 0) return 0;
@@ -510,207 +553,492 @@ export default function ApartmentDetail() {
     }
     return stars;
   };
+
+  const formatPrice = (price) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 0
+    }).format(price);
+  };
+
+  const getFloorLabel = (floorNumber, totalFloors) => {
+    if (floorNumber === 1) return 'Dabaqda 1';
+    if (floorNumber === totalFloors) return `Dabaqda ${floorNumber}aad (Sare)`;
+    return `Dabaqda ${floorNumber}aad`;
+  };
+
+  const getStatusBadge = (floor) => {
+    switch (floor.floor_status) {
+      case 'available':
+        return (
+          <span className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-semibold bg-green-100 text-green-800 border border-green-200">
+            <svg className="w-4 h-4 mr-1.5" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+            </svg>
+            La Kireyn Karaa
+          </span>
+        );
+      case 'occupied':
+        return (
+          <span className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-semibold bg-red-100 text-red-800 border border-red-200">
+            <svg className="w-4 h-4 mr-1.5" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+            </svg>
+            La Kireeyay
+          </span>
+        );
+      case 'not_available':
+        return (
+          <span className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-semibold bg-gray-100 text-gray-800 border border-gray-200">
+            <svg className="w-4 h-4 mr-1.5" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+            </svg>
+            Lama Heli Karo
+          </span>
+        );
+      case 'maintenance':
+        return (
+          <span className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-semibold bg-yellow-100 text-yellow-800 border border-yellow-200">
+            <svg className="w-4 h-4 mr-1.5" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+            </svg>
+            Dayactir
+          </span>
+        );
+      default:
+        return (
+          <span className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-semibold bg-gray-100 text-gray-800 border border-gray-200">
+            Lama Heli Karo
+          </span>
+        );
+    }
+  };
+
+  // Check if building has any available floors
+  const hasAvailableFloors = () => {
+    return apartmentFloors.some(floor => floor.floor_status === 'available');
+  };
+
+  // Get building availability status
+  const getBuildingAvailabilityBadge = () => {
+    const isAvailable = hasAvailableFloors();
+    
+    if (isAvailable) {
+      return (
+        <span className="inline-flex items-center px-4 py-2 rounded-full text-lg font-bold bg-green-100 text-green-800 border-2 border-green-300">
+          <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+          </svg>
+          ✅ La Heli Karaa
+        </span>
+      );
+    } else {
+      return (
+        <span className="inline-flex items-center px-4 py-2 rounded-full text-lg font-bold bg-red-100 text-red-800 border-2 border-red-300">
+          <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+          </svg>
+          ❌ Lama Heli Karo
+        </span>
+      );
+    }
+  };
   
   return (
-    <div className="bg-gradient-to-b from-night-950 to-night-900 text-white min-h-screen">
-      {/* Image Gallery Section */}
-      <div className="relative bg-night-900">
-        <div className="container mx-auto px-4 py-8">
-          <div className="bg-night-800 border border-night-700 shadow-lg rounded-xl overflow-hidden">
-            <div className="flex flex-col lg:flex-row">
-              {/* Main Image */}
-              <div className="lg:w-2/3 relative">
-                <div 
-                  className="bg-night-900 aspect-[16/9] cursor-pointer"
-                  onClick={() => setShowImageViewer(true)}
-                >
-                  {currentImage && currentImage.storage_path && currentImage.storage_path.trim() !== '' ? (
-                    <>
-                      <img 
-                        src={getImageUrl(currentImage.storage_path)} 
-                        alt={apartment.title}
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          console.log('Image failed to load:', currentImage.storage_path);
-                          e.target.onerror = null;
-                          e.target.src = '/images/placeholder-apartment.svg';
-                        }}
-                      />
-                      <div className="absolute inset-0 bg-night-900 opacity-0">
-                        {/* Invisible fallback that becomes visible if image fails */}
-                      </div>
-                      
-                      {/* Click to view indicator */}
-                      <div className="absolute bottom-4 right-4 bg-black bg-opacity-60 text-white px-3 py-1 rounded-full text-xs flex items-center">
-                        <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                        </svg>
-                        View
-                      </div>
-                    </>
-                  ) : (
-                    <div className="w-full h-full flex flex-col items-center justify-center bg-night-900">
-                      <svg className="w-12 h-12 text-night-700 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
-                      <p className="text-night-400">No image available</p>
-                    </div>
-                  )}
-                </div>
-                
-                {/* Image carousel controls */}
-                {apartment.apartment_images && apartment.apartment_images.length > 1 && (
-                  <div className="absolute bottom-4 left-4 right-4 flex justify-between">
-                    <button 
-                      onClick={() => {
-                        const newIndex = activeImageIndex === 0 
-                          ? apartment.apartment_images.length - 1 
-                          : activeImageIndex - 1;
-                        setActiveImageIndex(newIndex);
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+      {/* Header Section - Image Left, Info Right */}
+      <div className="container mx-auto px-4 py-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+          
+          {/* Left Side - Image Gallery */}
+          <div className="space-y-4">
+            {/* Main Image */}
+            <div className="bg-gray-800 rounded-2xl overflow-hidden shadow-2xl border border-gray-700">
+              <div className="aspect-[4/3] relative cursor-pointer" onClick={() => setShowImageViewer(true)}>
+                {currentImage && currentImage.storage_path && currentImage.storage_path.trim() !== '' ? (
+                  <>
+                    <img 
+                      src={getImageUrl(currentImage.storage_path)} 
+                      alt={apartment.title}
+                      className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
+                      onError={(e) => {
+                        e.target.onerror = null;
+                        e.target.src = '/images/placeholder-apartment.svg';
                       }}
-                      className="bg-night-900 bg-opacity-70 hover:bg-opacity-90 text-white p-2 rounded-full"
-                      aria-label="Previous image"
-                    >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                      </svg>
-                    </button>
+                    />
                     
-                    <button 
-                      onClick={() => {
-                        const newIndex = activeImageIndex === apartment.apartment_images.length - 1 
-                          ? 0 
-                          : activeImageIndex + 1;
-                        setActiveImageIndex(newIndex);
-                      }}
-                      className="bg-night-900 bg-opacity-70 hover:bg-opacity-90 text-white p-2 rounded-full"
-                      aria-label="Next image"
+                    {/* Image navigation arrows */}
+                    {apartment.apartment_images && apartment.apartment_images.length > 1 && (
+                      <>
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const newIndex = activeImageIndex === 0 
+                              ? apartment.apartment_images.length - 1 
+                              : activeImageIndex - 1;
+                            setActiveImageIndex(newIndex);
+                          }}
+                          className="absolute left-4 top-1/2 transform -translate-y-1/2 bg-black/50 backdrop-blur-sm hover:bg-black/70 text-white p-3 rounded-full transition-all duration-200"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                          </svg>
+                        </button>
+                        
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const newIndex = activeImageIndex === apartment.apartment_images.length - 1 
+                              ? 0 
+                              : activeImageIndex + 1;
+                            setActiveImageIndex(newIndex);
+                          }}
+                          className="absolute right-4 top-1/2 transform -translate-y-1/2 bg-black/50 backdrop-blur-sm hover:bg-black/70 text-white p-3 rounded-full transition-all duration-200"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </button>
+                      </>
+                    )}
+                    
+                    {/* View Gallery Button */}
+                    <button
+                      onClick={() => setShowImageViewer(true)}
+                      className="absolute bottom-4 right-4 bg-black/50 backdrop-blur-sm hover:bg-black/70 text-white px-4 py-2 rounded-full flex items-center space-x-2 transition-all duration-200"
                     >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                       </svg>
+                      <span className="text-sm font-medium">
+                        {apartment.apartment_images?.length || 1} Sawir
+                      </span>
                     </button>
+                  </>
+                ) : (
+                  <div className="w-full h-full flex flex-col items-center justify-center bg-gray-700">
+                    <svg className="w-16 h-16 text-gray-500 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <p className="text-gray-400 text-lg">Sawir ma jiro</p>
                   </div>
                 )}
-                
-                {/* Badge for price */}
-                <div className="absolute top-4 right-4">
-                  <span className="bg-primary-600 text-white px-3 py-1 rounded-lg font-semibold shadow-lg">
-                    {formattedPrice}/mo
-                  </span>
-                </div>
               </div>
               
-              {/* Right info panel */}
-              <div className="lg:w-1/3 p-6 border-l border-night-700">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h1 className="text-2xl font-bold mb-2">{apartment.title}</h1>
-                    <p className="text-night-300 mb-4">{apartment.location_description}</p>
-                  </div>
-                </div>
-                
-                {/* Availability Status Badge */}
-                <div className="mb-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                    <span className={`inline-flex items-center px-4 py-2 rounded-lg text-sm font-semibold ${
-                      apartment.is_available 
-                        ? 'bg-green-100 text-green-800 border-2 border-green-300' 
-                        : 'bg-red-100 text-red-800 border-2 border-red-300'
-                    }`}>
-                      {apartment.is_available ? (
-                        <>
-                          <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                          </svg>
-                          ✅ Available for Rent
-                        </>
-                      ) : (
-                        <>
-                          <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                          </svg>
-                          ❌ Not Available
-                        </>
-                      )}
-                    </span>
-                    
-                    {/* Quick Toggle Button - Only for apartment owners */}
-                    {user && user.id === apartment.owner_id && (
+              {/* Thumbnail strip */}
+              {apartment.apartment_images && Array.isArray(apartment.apartment_images) && apartment.apartment_images.length > 1 && (
+                <div className="bg-gray-900 p-4 border-t border-gray-700">
+                  <div className="flex space-x-2 overflow-x-auto pb-2 scrollbar-hide">
+                    {apartment.apartment_images.map((image, index) => (
                       <button
-                        onClick={handleToggleAvailability}
-                        disabled={toggleLoading}
-                        className={`inline-flex items-center px-4 py-2 rounded-lg text-sm font-semibold transition-colors shadow-sm ${
-                          toggleLoading
-                            ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
-                            : apartment.is_available
-                              ? 'bg-red-100 text-red-800 border-2 border-red-300 hover:bg-red-200 hover:shadow-md'
-                              : 'bg-green-100 text-green-800 border-2 border-green-300 hover:bg-green-200 hover:shadow-md'
+                        key={image?.id || `thumb-${index}`}
+                        onClick={() => setActiveImageIndex(index)}
+                        className={`flex-shrink-0 w-16 h-12 rounded-lg overflow-hidden transition-all duration-200 ${
+                          activeImageIndex === index ? 'ring-2 ring-blue-500 shadow-lg' : 'ring-1 ring-gray-600 hover:ring-gray-500'
                         }`}
                       >
-                        {toggleLoading ? (
-                          <>
-                            <svg className="animate-spin w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                            Updating...
-                          </>
-                        ) : apartment.is_available ? (
-                          <>
-                            <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                            </svg>
-                            Mark as Occupied
-                          </>
+                        {image && image.storage_path && image.storage_path.trim() !== '' ? (
+                          <img 
+                            src={getImageUrl(image.storage_path)} 
+                            alt={`Thumbnail ${index + 1}`}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              e.target.onerror = null;
+                              e.target.src = '/images/placeholder-apartment.svg';
+                            }}
+                          />
                         ) : (
-                          <>
-                            <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                            </svg>
-                            Mark as Available
-                          </>
+                          <div className="w-full h-full flex items-center justify-center bg-gray-700">
+                            <span className="text-xs text-gray-400">No img</span>
+                          </div>
                         )}
                       </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+          
+          {/* Right Side - Property Information */}
+          <div className="space-y-6">
+            {/* Property Title & Basic Info */}
+            <div className="bg-gray-800 rounded-2xl p-6 shadow-2xl border border-gray-700">
+              <h1 className="text-3xl md:text-4xl font-bold text-white mb-3">
+                {apartment.title}
+              </h1>
+              <p className="text-xl text-gray-300 mb-4 flex items-center">
+                <svg className="w-5 h-5 mr-2 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                {apartment.location_description}
+              </p>
+              
+              {/* Rating & Reviews */}
+              <div className="flex items-center mb-6">
+                <div className="flex items-center mr-4">
+                  {renderStars(getAverageRating())}
+                  <span className="ml-2 text-lg text-yellow-400 font-bold">
+                    {getAverageRating()}
+                  </span>
+                </div>
+                <span className="text-gray-400">•</span>
+                <span className="ml-4 text-gray-300 font-medium">
+                  {reviews.length} {reviews.length === 1 ? 'faallo' : 'faallo'}
+                </span>
+              </div>
+              
+              {/* Availability Status */}
+              <div className="mb-6">
+                <h3 className="text-xl font-bold text-white mb-4">Xaaladda Helitaanka</h3>
+                <div className="flex items-center space-x-4 mb-4">
+                  {getBuildingAvailabilityBadge()}
+                </div>
+                
+                <div className="text-gray-300 text-lg">
+                  <span className="font-bold text-2xl text-green-400">
+                    {apartmentFloors.filter(f => f.floor_status === 'available').length}
+                  </span>
+                  <span> ka mid ah </span>
+                  <span className="font-bold text-xl text-white">{apartmentFloors.length}</span>
+                  <span> dabaq ayaa la heli karaa</span>
+                </div>
+                
+                {/* Price Range Summary */}
+                {apartmentFloors.length > 0 && (
+                  <div className="mt-4 p-4 bg-gray-900 rounded-xl border border-gray-600">
+                    <div className="text-center">
+                      <div className="text-lg text-gray-300 mb-2">Qiimaha Dabaqyada:</div>
+                      <div className="text-2xl font-bold text-green-400">
+                        {formatPrice(Math.min(...apartmentFloors.map(f => f.price_per_month)))}
+                        {apartmentFloors.length > 1 && 
+                          Math.min(...apartmentFloors.map(f => f.price_per_month)) !== 
+                          Math.max(...apartmentFloors.map(f => f.price_per_month)) && (
+                          <span className="text-gray-400"> - {formatPrice(Math.max(...apartmentFloors.map(f => f.price_per_month)))}</span>
+                        )}
+                      </div>
+                      <div className="text-gray-400">bishii</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              {/* Quick Contact Buttons */}
+              {owner && user && user.id !== apartment.owner_id && (
+                <div className="space-y-3">
+                  {owner.whatsapp_number && (
+                    <a 
+                      href={`https://wa.me/${owner.whatsapp_number.replace(/\D/g, '')}?text=Salaan, waxaan xiiseynayaa gurigaaga: ${apartment.title}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full flex items-center justify-center px-6 py-4 bg-green-600 hover:bg-green-700 text-white rounded-xl transition-colors font-bold text-lg"
+                    >
+                      <svg className="w-6 h-6 mr-3" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z" />
+                      </svg>
+                      WhatsApp
+                    </a>
+                  )}
+                  <button 
+                    onClick={handleNavigateToMessages}
+                    className="w-full flex items-center justify-center px-6 py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-colors font-bold text-lg"
+                  >
+                    <svg className="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                    Fariin Dir
+                  </button>
+                </div>
+              )}
+            </div>
+            
+            {/* Owner Info Card */}
+            {owner && (
+              <div className="bg-gray-800 rounded-2xl p-6 shadow-2xl border border-gray-700">
+                <h3 className="text-xl font-bold text-white mb-4 flex items-center">
+                  <svg className="w-6 h-6 mr-2 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  Mulkiilaha Guriga
+                </h3>
+                
+                <div className="flex items-center">
+                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-xl font-bold mr-4">
+                    {owner.full_name?.charAt(0) || 'M'}
+                  </div>
+                  <div>
+                    <p className="font-bold text-lg text-white">{owner.full_name || "Mulkiile"}</p>
+                    {owner.business_name && (
+                      <p className="text-gray-400">{owner.business_name}</p>
                     )}
                   </div>
                 </div>
-                
-                <div className="flex items-center mb-6">
-                  <div className="flex mr-4">
-                    {renderStars(getAverageRating())}
+              </div>
+            )}
+          </div>
+        </div>
+        
+        {/* Floors Section - Full Width Below */}
+        <div className="space-y-6">
+          <div className="text-center">
+            <h2 className="text-3xl md:text-4xl font-bold text-white mb-2">
+              🏢 Dabaqyada Guriga
+            </h2>
+            <p className="text-gray-400 text-lg">Dooro dabaqda aad rabto</p>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {apartmentFloors.map((floor) => (
+              <motion.div 
+                key={floor.id} 
+                className={`bg-gray-800 rounded-2xl shadow-2xl overflow-hidden border-2 transition-all duration-300 hover:shadow-3xl ${
+                  floor.floor_status === 'available' 
+                    ? 'border-green-500 hover:border-green-400 hover:shadow-green-500/20' 
+                    : 'border-gray-600 opacity-75'
+                }`}
+                whileHover={{ y: -5, scale: 1.02 }}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                {/* Floor Header */}
+                <div className={`p-4 ${
+                  floor.floor_status === 'available' 
+                    ? 'bg-gradient-to-r from-green-600/20 to-blue-600/20' 
+                    : 'bg-gray-700'
+                }`}>
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h3 className="text-xl font-bold text-white mb-2">
+                        {getFloorLabel(floor.floor_number, apartmentFloors.length)}
+                      </h3>
+                      <div className="bg-gray-800/50 rounded-lg p-3 border border-gray-600">
+                        <div className="text-center">
+                          <div className="text-3xl font-bold text-green-400 mb-1">
+                            {formatPrice(floor.price_per_month)}
+                          </div>
+                          <div className="text-sm text-gray-400 font-medium">bishii</div>
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      {getStatusBadge(floor)}
+                    </div>
                   </div>
-                  <span className="text-sm text-night-300">
-                    {getAverageRating()} • {reviews.length} {reviews.length === 1 ? 'review' : 'reviews'}
-                  </span>
                 </div>
                 
-                <div className="grid grid-cols-2 gap-4 mb-6">
-                  <div className="bg-night-900 rounded-lg p-3 text-center">
-                    <span className="block text-primary-400 text-lg font-semibold">{apartment.rooms}</span>
-                    <span className="text-sm text-night-400">Qolal</span>
+                {/* Floor Details */}
+                <div className="p-6">
+                  {/* Room Info Grid */}
+                  <div className="grid grid-cols-2 gap-4 mb-4">
+                    <div className="text-center p-3 bg-gray-700 rounded-xl">
+                      <div className="flex items-center justify-center mb-2">
+                        <svg className="w-6 h-6 text-blue-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 21l0-12" />
+                        </svg>
+                        <div className="text-2xl font-bold text-blue-400">{floor.bedrooms_on_floor}</div>
+                      </div>
+                      <div className="text-sm text-gray-300 font-medium">Qolalka Jiifka</div>
+                    </div>
+                    <div className="text-center p-3 bg-gray-700 rounded-xl">
+                      <div className="flex items-center justify-center mb-2">
+                        <svg className="w-6 h-6 text-blue-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10v11M20 10v11" />
+                        </svg>
+                        <div className="text-2xl font-bold text-blue-400">{floor.bathrooms_on_floor}</div>
+                      </div>
+                      <div className="text-sm text-gray-300 font-medium">Musqulaha</div>
+                    </div>
                   </div>
-                  <div className="bg-night-900 rounded-lg p-3 text-center">
-                    <span className="block text-primary-400 text-lg font-semibold">{apartment.bathrooms}</span>
-                    <span className="text-sm text-night-400">Musqulo</span>
+
+                  {/* Amenities - Horizontal Row */}
+                  <div className="flex flex-wrap gap-2 mb-4">
+                    <div className="flex items-center space-x-2 px-3 py-2 bg-gray-700 rounded-lg">
+                      <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
+                        floor.has_kitchen ? 'bg-green-500' : 'bg-red-500'
+                      }`}>
+                        <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4" />
+                        </svg>
+                      </div>
+                      <span className={`text-sm font-medium ${
+                        floor.has_kitchen ? 'text-green-300' : 'text-red-300'
+                      }`}>
+                        Jikada
+                      </span>
+                    </div>
+                    
+                    <div className="flex items-center space-x-2 px-3 py-2 bg-gray-700 rounded-lg">
+                      <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
+                        floor.has_living_room ? 'bg-green-500' : 'bg-red-500'
+                      }`}>
+                        <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 21l0-12" />
+                        </svg>
+                      </div>
+                      <span className={`text-sm font-medium ${
+                        floor.has_living_room ? 'text-green-300' : 'text-red-300'
+                      }`}>
+                        Qolka Fadhiga
+                      </span>
+                    </div>
+                    
+                    <div className="flex items-center space-x-2 px-3 py-2 bg-gray-700 rounded-lg">
+                      <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
+                        floor.has_master_room ? 'bg-purple-500' : 'bg-red-500'
+                      }`}>
+                        <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                        </svg>
+                      </div>
+                      <span className={`text-sm font-medium ${
+                        floor.has_master_room ? 'text-purple-300' : 'text-red-300'
+                      }`}>
+                        Master Room
+                      </span>
+                    </div>
                   </div>
-                  <div className="bg-night-900 rounded-lg p-3 text-center">
-                    <span className="block text-primary-400 text-lg font-semibold">{apartment.is_furnished ? 'Haa' : 'Maya'}</span>
-                    <span className="text-sm text-night-400">Waa Qalabaysan yahay</span>
-                  </div>
-                </div>
-                
-                {owner && (
-                  <div className="mt-4">
-                    <h3 className="text-lg font-semibold mb-2">Contact Owner</h3>
-                    <div className="flex flex-wrap gap-3">
+                  
+                  {/* Floor Description */}
+                  {floor.floor_description && (
+                    <div className="mb-4 p-3 bg-gray-700 rounded-lg">
+                      <p className="text-sm text-gray-300">{floor.floor_description}</p>
+                    </div>
+                  )}
+
+                  {/* Action Buttons */}
+                  {user && user.id === apartment.owner_id ? (
+                    // Owner controls
+                    <div className="space-y-3">
+                      <div className="bg-gray-600 rounded-lg p-3">
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                          Bedel Xaaladda Dabaqan:
+                        </label>
+                        <select
+                          value={floor.floor_status}
+                          onChange={(e) => handleFloorStatusChange(floor.id, e.target.value)}
+                          className="w-full bg-gray-700 border border-gray-600 text-white rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="available">La Kireyn Karaa</option>
+                          <option value="occupied">La Kireeyay</option>
+                          <option value="not_available">Lama Heli Karo</option>
+                          <option value="maintenance">Dayactir</option>
+                        </select>
+                      </div>
+                    </div>
+                  ) : floor.floor_status === 'available' && owner ? (
+                    // Regular user contact buttons
+                    <div className="space-y-3">
                       {owner.whatsapp_number && (
                         <a 
-                          href={`https://wa.me/${owner.whatsapp_number.replace(/\D/g, '')}?text=Hello, I'm interested in your apartment: ${apartment.title}`}
+                          href={`https://wa.me/${owner.whatsapp_number.replace(/\D/g, '')}?text=Salaan, waxaan xiiseynayaa ${getFloorLabel(floor.floor_number, apartmentFloors.length)} ee gurigaaga: ${apartment.title}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
+                          className="w-full flex items-center justify-center px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl transition-colors font-medium"
                         >
                           <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 24 24">
                             <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z" />
@@ -720,7 +1048,7 @@ export default function ApartmentDetail() {
                       )}
                       <button 
                         onClick={handleNavigateToMessages}
-                        className="flex items-center px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors"
+                        className="w-full flex items-center justify-center px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-colors font-medium"
                       >
                         <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
@@ -728,53 +1056,112 @@ export default function ApartmentDetail() {
                         Fariin Dir
                       </button>
                     </div>
-                    {!apartment.is_available && (
-                      <p className="text-sm text-gray-500 mt-2">
-                        💡 This apartment is currently not available, but you can still contact the owner to ask about future availability or similar properties.
+                  ) : floor.floor_status !== 'available' && (
+                    <div className="text-center py-4 bg-gray-700 rounded-xl">
+                      <p className="text-gray-400 font-medium">
+                        {floor.floor_status === 'occupied' && '🏠 Dabaqan hadda waa la kireeyay'}
+                        {floor.floor_status === 'not_available' && '❌ Dabaqan hadda lama heli karo'}
+                        {floor.floor_status === 'maintenance' && '🔧 Dabaqan waa dayactir'}
                       </p>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-            
-            {/* Thumbnail strip */}
-            {apartment.apartment_images && Array.isArray(apartment.apartment_images) && apartment.apartment_images.length > 1 && (
-              <div className="bg-night-950 p-4 border-t border-night-700">
-                <div className="flex space-x-2 overflow-x-auto pb-2">
-                  {apartment.apartment_images.map((image, index) => (
-                    <button
-                      key={image?.id || `thumb-${index}`}
-                      onClick={() => setActiveImageIndex(index)}
-                      className={`flex-shrink-0 w-20 h-20 ${
-                        activeImageIndex === index ? 'ring-2 ring-primary-500' : ''
-                      }`}
-                    >
-                      {image && image.storage_path && image.storage_path.trim() !== '' ? (
-                        <img 
-                          src={getImageUrl(image.storage_path)} 
-                          alt={`Thumbnail ${index + 1}`}
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            console.log('Thumbnail failed to load:', image.storage_path);
-                            e.target.onerror = null;
-                            e.target.src = '/images/placeholder-apartment.svg';
-                          }}
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center bg-night-800">
-                          <span className="text-xs text-night-400">No image</span>
-                        </div>
-                      )}
-                    </button>
-                  ))}
+                    </div>
+                  )}
                 </div>
-              </div>
-            )}
+              </motion.div>
+            ))}
           </div>
         </div>
+
+        {/* Property Description */}
+        {apartment.description && (
+          <div className="bg-gray-800 rounded-2xl p-6 shadow-2xl border border-gray-700 mt-8">
+            <h3 className="text-2xl font-bold text-white mb-4 flex items-center">
+              <svg className="w-6 h-6 mr-2 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              Faahfaahin Guriga
+            </h3>
+            <p className="text-gray-300 leading-relaxed text-lg">{apartment.description}</p>
+          </div>
+        )}
+
+        {/* Reviews Section */}
+        <div className="bg-gray-800 rounded-2xl p-6 shadow-2xl border border-gray-700 mt-8">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-2xl font-bold text-white flex items-center">
+              <svg className="w-6 h-6 mr-2 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+              </svg>
+              Faallooyinka
+            </h3>
+            {user && (
+              <Link 
+                to={`/review/${apartment.id}`}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium"
+              >
+                Qor Faallo
+              </Link>
+            )}
+          </div>
+          
+          {reviews.length === 0 ? (
+            <div className="text-center py-8">
+              <div className="text-6xl mb-4">📝</div>
+              <p className="text-gray-400 text-lg mb-2">Weli faallo malaha</p>
+              <p className="text-gray-500">Noqo qofka ugu horreeya ee faallo qora!</p>
+            </div>
+          ) : (
+            <div>
+              <div className="text-center mb-6 p-4 bg-gray-700 rounded-xl">
+                <div className="text-4xl font-bold text-yellow-400 mb-2">
+                  {getAverageRating()}
+                </div>
+                <div className="flex justify-center mb-2">
+                  {renderStars(getAverageRating())}
+                </div>
+                <div className="text-gray-300">
+                  {reviews.length} {reviews.length === 1 ? 'faallo' : 'faallo'}
+                </div>
+              </div>
+              
+              <div className="space-y-4 max-h-96 overflow-y-auto">
+                {reviews.map((review) => (
+                  <div key={review.id} className="bg-gray-700 rounded-xl p-4 border border-gray-600">
+                    <div className="flex justify-between items-start mb-2">
+                      <p className="font-bold text-white">
+                        {review.profiles?.full_name || 'Qof aan la aqoon'}
+                      </p>
+                      <div className="flex">
+                        {renderStars(review.rating)}
+                      </div>
+                    </div>
+                    <p className="text-gray-300 mb-2">{review.comment}</p>
+                    <p className="text-xs text-gray-500">
+                      {new Date(review.created_at).toLocaleDateString()}
+                    </p>
+                    
+                    {review.review_replies && review.review_replies.length > 0 && (
+                      <div className="mt-3 pl-4 border-l-2 border-blue-500">
+                        {review.review_replies.map(reply => (
+                          <div key={reply.id} className="mb-2">
+                            <div className="flex items-center mb-1">
+                              <span className="font-bold text-blue-400">Jawaabta Mulkiilaha</span>
+                              <span className="ml-2 text-xs text-gray-500">
+                                {new Date(reply.created_at).toLocaleDateString()}
+                              </span>
+                            </div>
+                            <p className="text-gray-300">{reply.reply_text}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
-      
+
       {/* Full screen image viewer modal */}
       <AnimatePresence>
         {showImageViewer && apartment.apartment_images && apartment.apartment_images.length > 0 && (
@@ -802,235 +1189,6 @@ export default function ApartmentDetail() {
           </motion.div>
         )}
       </AnimatePresence>
-      
-      {/* Details Section */}
-      <div className="container mx-auto px-4 py-12">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Left Column - Details */}
-          <div className="lg:col-span-2">
-            {/* About Section with Location */}
-            <div className="bg-night-800 border border-night-700 shadow-lg rounded-xl p-6 mb-8">
-              <h2 className="text-xl font-semibold mb-4">Faahfaahin Guriga</h2>
-              
-              {/* Location (now more prominent) */}
-              <div className="mb-5 p-4 bg-night-750 rounded-lg border border-night-600">
-                <h3 className="text-lg font-bold text-primary-300 mb-2">Goobta</h3>
-                {apartment.location_description ? (
-                  <p className="text-white">{apartment.location_description}</p>
-                ) : (
-                  <p className="text-night-400 italic">Faahfaahinta goobta lama heli karo</p>
-                )}
-              </div>
-              
-              {/* Description */}
-              <div className="prose prose-invert max-w-none text-night-300">
-                {apartment.description ? (
-                  <p>{apartment.description}</p>
-                ) : (
-                  <p className="text-night-500 italic">Ma jiro faahfaahin</p>
-                )}
-              </div>
-            </div>
-            
-            {/* Amenities */}
-            <div className="bg-night-800 border border-night-700 shadow-lg rounded-xl p-6 mb-8">
-              <h2 className="text-xl font-semibold mb-4">Adeegyada</h2>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                {apartment.has_electricity && (
-                  <div className="flex items-center">
-                    <svg className="w-5 h-5 mr-2 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                    </svg>
-                    <span className="text-night-200">Korontada</span>
-                  </div>
-                )}
-                {apartment.has_water && (
-                  <div className="flex items-center">
-                    <svg className="w-5 h-5 mr-2 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
-                    </svg>
-                    <span className="text-night-200">Biyaha</span>
-                  </div>
-                )}
-                {apartment.has_internet && (
-                  <div className="flex items-center">
-                    <svg className="w-5 h-5 mr-2 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0" />
-                    </svg>
-                    <span className="text-night-200">Internetka</span>
-                  </div>
-                )}
-                {apartment.has_parking && (
-                  <div className="flex items-center">
-                    <svg className="w-5 h-5 mr-2 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <span className="text-night-200">Baarkinka</span>
-                  </div>
-                )}
-                {apartment.has_security && (
-                  <div className="flex items-center">
-                    <svg className="w-5 h-5 mr-2 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                    </svg>
-                    <span className="text-night-200">Amniga</span>
-                  </div>
-                )}
-                {apartment.is_furnished && (
-                  <div className="flex items-center">
-                    <svg className="w-5 h-5 mr-2 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                    </svg>
-                    <span className="text-night-200">Waa Qalabaysan yahay</span>
-                  </div>
-                )}
-              </div>
-            </div>
-            
-            {/* Reviews Section */}
-            <div className="bg-night-800 border border-night-700 shadow-lg rounded-xl p-6">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-semibold">Faallooyinka</h2>
-                
-                {user && (
-                  <Link 
-                    to={`/review/${apartment.id}`}
-                    className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors"
-                  >
-                    Qor Faallo
-                  </Link>
-                )}
-              </div>
-              
-              {reviews.length === 0 ? (
-                <div className="text-center py-8">
-                  <p className="text-night-400">Weli faallo malaha. Noqo qofka ugu horreeya ee faallo qora!</p>
-                </div>
-              ) : (
-                <div className="space-y-6">
-                  {reviews.map((review) => (
-                    <div key={review.id} className="border-b border-night-700 pb-6 last:border-b-0 last:pb-0">
-                      <div className="flex justify-between">
-                        <div>
-                          <p className="font-medium">
-                            {review.profiles?.full_name || 'Anonymous User'}
-                          </p>
-                          <div className="flex items-center mt-1 mb-2">
-                            {renderStars(review.rating)}
-                            <span className="ml-2 text-sm text-night-400">
-                              {new Date(review.created_at).toLocaleDateString()}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      <p className="text-night-300 mt-2">{review.comment}</p>
-                      
-                      {/* Review Replies */}
-                      {review.review_replies && review.review_replies.length > 0 && (
-                        <div className="mt-4 pl-4 border-l-2 border-night-700">
-                          {review.review_replies.map(reply => (
-                            <div key={reply.id} className="mb-2">
-                              <div className="flex items-center">
-                                <span className="font-medium text-primary-400">Jawaabta Mulkiilaha</span>
-                                <span className="ml-2 text-xs text-night-400">
-                                  {new Date(reply.created_at).toLocaleDateString()}
-                                </span>
-                              </div>
-                              <p className="text-night-400 mt-1">{reply.reply_text}</p>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-          
-          {/* Right Column - Owner Information */}
-          <div className="lg:col-span-1">
-            {/* Owner Box */}
-            {owner && (
-              <div className="bg-night-800 border border-night-700 shadow-lg rounded-xl p-6 mb-8">
-                <h3 className="text-lg font-semibold mb-4">Mulkiilaha Guriga</h3>
-                
-                <div className="flex items-center mb-4">
-                  <div className="w-12 h-12 rounded-full bg-primary-900 flex items-center justify-center text-white text-xl font-bold mr-3">
-                    {owner.full_name?.charAt(0) || 'M'}
-                  </div>
-                  <div>
-                    <p className="font-medium">{owner.full_name || "Mulkiile"}</p>
-                    {owner.business_name && (
-                      <p className="text-sm text-night-400">{owner.business_name}</p>
-                    )}
-                  </div>
-                </div>
-                
-                {user && user.id !== apartment.owner_id && (
-                  <div className="space-y-3">
-                    <button 
-                      onClick={handleNavigateToMessages}
-                      className="w-full flex justify-center items-center px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors"
-                    >
-                      <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                      </svg>
-                      La xiriir
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-            
-            {/* Additional Apartment Info */}
-            <div className="bg-night-800 border border-night-700 shadow-lg rounded-xl p-6">
-              <h3 className="text-lg font-semibold mb-4">Faahfaahinta Guriga</h3>
-              
-              {/* Available From */}
-              {apartment.available_from && (
-                <div className="mb-4">
-                  <h4 className="font-medium text-primary-300 mb-1">Laga bilaabo</h4>
-                  <p className="text-night-200">
-                    {new Date(apartment.available_from).toLocaleDateString()}
-                  </p>
-                </div>
-              )}
-              
-              {/* Lease Length */}
-              {apartment.min_lease_months && (
-                <div className="mb-4">
-                  <h4 className="font-medium text-primary-300 mb-1">Kireynta ugu yar</h4>
-                  <p className="text-night-200">{apartment.min_lease_months} bilood</p>
-                </div>
-              )}
-              
-              {/* Property Type */}
-              {apartment.property_type && (
-                <div className="mb-4">
-                  <h4 className="font-medium text-primary-300 mb-1">Nooca Guriga</h4>
-                  <p className="text-night-200">{apartment.property_type}</p>
-                </div>
-              )}
-              
-              {/* Deposit */}
-              {apartment.deposit_amount && (
-                <div>
-                  <h4 className="font-medium text-primary-300 mb-1">Damaanad Celinta</h4>
-                  <p className="text-night-200">
-                    {new Intl.NumberFormat('en-US', {
-                      style: 'currency',
-                      currency: 'USD',
-                      minimumFractionDigits: 0
-                    }).format(apartment.deposit_amount)}
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
   );
 } 

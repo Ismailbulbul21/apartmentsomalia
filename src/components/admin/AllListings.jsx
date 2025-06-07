@@ -4,8 +4,8 @@ import LoadingSpinner from '../ui/LoadingSpinner';
 
 // Utility function to get image URL from storage path
 const getImageUrl = (path) => {
-  if (!path) {
-    return 'https://via.placeholder.com/150x150/cccccc/666666?text=No+Image';
+  if (!path || path.trim() === '') {
+    return '/images/placeholder-apartment.svg';
   }
   
   // If it's already a complete URL (for demo/sample data)
@@ -16,24 +16,32 @@ const getImageUrl = (path) => {
   // For storage paths
   try {
     // Handle different path formats
-    let normalizedPath = path;
+    let normalizedPath = path.trim();
     
-    if (path.includes('apartment_images/')) {
+    if (normalizedPath.includes('apartment_images/')) {
       // If the path includes the bucket name already, extract just the path part
-      normalizedPath = path.split('apartment_images/')[1];
-    } else if (!path.includes('/')) {
+      normalizedPath = normalizedPath.split('apartment_images/')[1];
+    } else if (!normalizedPath.includes('/')) {
       // If it's just a filename, assume it's in the apartments folder
-      normalizedPath = `apartments/${path}`;
+      normalizedPath = `apartments/${normalizedPath}`;
+    }
+    
+    if (!normalizedPath || normalizedPath === '') {
+      return '/images/placeholder-apartment.svg';
     }
     
     const { data } = supabase.storage
       .from('apartment_images')
       .getPublicUrl(normalizedPath);
     
+    if (data && data.publicUrl && data.publicUrl.trim() !== '') {
     return data.publicUrl;
+    } else {
+      return '/images/placeholder-apartment.svg';
+    }
   } catch (error) {
     console.error('Error generating image URL:', error, path);
-    return 'https://via.placeholder.com/150x150/cccccc/666666?text=No+Image';
+    return '/images/placeholder-apartment.svg';
   }
 };
 
@@ -356,10 +364,10 @@ const AllListings = () => {
                   } else if (firstImage?.storage_path) {
                     imageUrl = getImageUrl(firstImage.storage_path);
                   } else {
-                    imageUrl = 'https://via.placeholder.com/150x150/cccccc/666666?text=No+Image';
+                    imageUrl = '/images/placeholder-apartment.svg';
                   }
                 } else {
-                  imageUrl = 'https://via.placeholder.com/150x150/cccccc/666666?text=No+Image';
+                  imageUrl = '/images/placeholder-apartment.svg';
                 }
                 
                 return (
@@ -373,7 +381,7 @@ const AllListings = () => {
                             alt={apartment.title}
                             loading="lazy"
                             onError={(e) => {
-                              e.target.src = 'https://via.placeholder.com/150x150/cccccc/666666?text=No+Image';
+                              e.target.src = '/images/placeholder-apartment.svg';
                             }}
                           />
                         </div>

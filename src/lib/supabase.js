@@ -1,8 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Use environment variables for Supabase credentials
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+// Hardcoded Supabase credentials for testing
+const supabaseUrl = 'https://evkttwkermhcyizywzpe.supabase.co';
+const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV2a3R0d2tlcm1oY3lpenl3enBlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDc0MTMzOTAsImV4cCI6MjA2Mjk4OTM5MH0._Dksvs00hB1wr4IyMXAlNTkj3F7khSf1QBAAwurbt1g';
 
 // This helps with debugging when environment variables are missing
 if (!supabaseUrl || !supabaseAnonKey) {
@@ -45,27 +45,55 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, supabaseOptio
  */
 export const uploadApartmentImage = async (file, apartmentId, isPrimary = false) => {
     try {
+        console.log('uploadApartmentImage called with:', {
+            fileName: file?.name,
+            fileSize: file?.size,
+            apartmentId,
+            isPrimary
+        });
+
         if (!file || !apartmentId) {
-            console.error('Missing required parameters');
-            return { success: false, error: 'Missing required parameters' };
+            const error = 'Missing required parameters';
+            console.error('uploadApartmentImage error:', error);
+            return { success: false, error };
         }
 
         // Make sure apartmentId is a valid UUID
         if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(apartmentId)) {
-            console.error('Invalid apartment ID format:', apartmentId);
-            return { success: false, error: 'Invalid apartment ID format' };
+            const error = `Invalid apartment ID format: ${apartmentId}`;
+            console.error('uploadApartmentImage error:', error);
+            return { success: false, error };
         }
+
+        // Verify apartment exists before uploading
+        console.log('Verifying apartment exists:', apartmentId);
+        const { data: apartmentCheck, error: apartmentCheckError } = await supabase
+            .from('apartments')
+            .select('id')
+            .eq('id', apartmentId)
+            .single();
+
+        if (apartmentCheckError || !apartmentCheck) {
+            const error = `Apartment not found: ${apartmentId}`;
+            console.error('uploadApartmentImage error:', error, apartmentCheckError);
+            return { success: false, error };
+        }
+
+        console.log('Apartment verified, proceeding with upload');
 
         const fileExt = file.name.split('.').pop();
         const fileName = `${apartmentId}-${Date.now()}-${Math.floor(Math.random() * 1000)}.${fileExt}`;
         const filePath = `apartments/${fileName}`;
 
+        console.log('Generated file path:', filePath);
+
         // First, check file size and optimize if needed
         if (file.size > 2000000) { // 2MB
-            console.warn('Large file detected, consider optimization');
+            console.warn('Large file detected, size:', file.size);
         }
 
         // Upload the file to storage
+        console.log('Starting storage upload...');
         const { data: uploadData, error: uploadError } = await supabase.storage
             .from('apartment_images')
             .upload(filePath, file);
@@ -75,10 +103,14 @@ export const uploadApartmentImage = async (file, apartmentId, isPrimary = false)
             return { success: false, error: uploadError };
         }
 
+        console.log('Storage upload successful:', uploadData);
+
         // Get the public URL for verification
-        const { data } = supabase.storage
+        const { data: urlData } = supabase.storage
             .from('apartment_images')
             .getPublicUrl(filePath);
+
+        console.log('Generated public URL:', urlData?.publicUrl);
 
         // Create image record in the database
         const imageRecord = {
@@ -88,6 +120,8 @@ export const uploadApartmentImage = async (file, apartmentId, isPrimary = false)
             created_at: new Date().toISOString()
         };
 
+        console.log('Creating image record:', imageRecord);
+
         const { data: insertData, error: imageRecordError } = await supabase
             .from('apartment_images')
             .insert(imageRecord)
@@ -95,10 +129,20 @@ export const uploadApartmentImage = async (file, apartmentId, isPrimary = false)
 
         if (imageRecordError) {
             console.error('Image record insert error:', imageRecordError);
+            // Try to clean up the uploaded file
+            try {
+                await supabase.storage
+                    .from('apartment_images')
+                    .remove([filePath]);
+                console.log('Cleaned up uploaded file after database error');
+            } catch (cleanupError) {
+                console.error('Failed to cleanup uploaded file:', cleanupError);
+            }
             return { success: false, error: imageRecordError };
         }
 
-        return { success: true, filePath, publicUrl: data.publicUrl };
+        console.log('Image record created successfully:', insertData);
+        return { success: true, filePath, publicUrl: urlData?.publicUrl, imageRecord: insertData[0] };
     } catch (error) {
         console.error('Error in uploadApartmentImage:', error);
         return { success: false, error };

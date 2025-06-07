@@ -9,7 +9,7 @@ import LoadingSpinner from '../components/ui/LoadingSpinner';
 const getImageUrl = (path) => {
   if (!path) {
     console.log('No path provided, returning placeholder');
-    return '/placeholder-apartment.jpg';
+    return '/images/placeholder-apartment.svg';
   }
   
   // If it's already a complete URL (for demo/sample data)
@@ -39,10 +39,10 @@ const getImageUrl = (path) => {
       .getPublicUrl(normalizedPath);
     
     console.log('Generated URL:', data.publicUrl);
-    return data.publicUrl || '/placeholder-apartment.jpg';
+    return data.publicUrl || '/images/placeholder-apartment.svg';
   } catch (error) {
     console.error('Error generating image URL:', error, path);
-    return '/placeholder-apartment.jpg';
+    return '/images/placeholder-apartment.svg';
   }
 };
 
@@ -52,6 +52,9 @@ const MyListings = () => {
   const [apartments, setApartments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [expandedApartment, setExpandedApartment] = useState(null);
+  const [apartmentFloors, setApartmentFloors] = useState({});
+  const [updatingFloor, setUpdatingFloor] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -107,6 +110,92 @@ const MyListings = () => {
     fetchApartments();
   }, [user.id]);
 
+  // Fetch floors for a specific apartment
+  const fetchApartmentFloors = async (apartmentId) => {
+    try {
+      const { data: floorsData, error: floorsError } = await supabase
+        .from('apartment_floors')
+        .select('*')
+        .eq('apartment_id', apartmentId)
+        .order('floor_number', { ascending: true });
+        
+      if (!floorsError && floorsData) {
+        setApartmentFloors(prev => ({
+          ...prev,
+          [apartmentId]: floorsData
+        }));
+      }
+    } catch (error) {
+      console.error('Error fetching floors:', error);
+    }
+  };
+
+  // Toggle floor availability
+  const toggleFloorAvailability = async (apartmentId, floorId, currentStatus) => {
+    try {
+      setUpdatingFloor(floorId);
+      
+      // Cycle through statuses: available -> not_available -> occupied -> maintenance -> available
+      const statusCycle = {
+        'available': 'not_available',
+        'not_available': 'occupied', 
+        'occupied': 'maintenance',
+        'maintenance': 'available'
+      };
+      
+      const newStatus = statusCycle[currentStatus] || 'available';
+      
+      const { error } = await supabase
+        .from('apartment_floors')
+        .update({ 
+          floor_status: newStatus,
+          is_available: newStatus === 'available'
+        })
+        .eq('id', floorId);
+        
+      if (error) throw error;
+      
+      // Calculate updated floors FIRST before updating state
+      const updatedFloors = apartmentFloors[apartmentId].map(floor => 
+        floor.id === floorId 
+          ? { ...floor, floor_status: newStatus, is_available: newStatus === 'available' }
+          : floor
+      );
+      
+      // Calculate apartment availability based on updated floors
+      const hasAvailableFloors = updatedFloors.some(floor => floor.floor_status === 'available');
+      
+      // Update local state with the updated floors
+      setApartmentFloors(prev => ({
+        ...prev,
+        [apartmentId]: updatedFloors
+      }));
+      
+      // Update apartment availability in database
+      const { error: apartmentError } = await supabase
+        .from('apartments')
+        .update({ is_available: hasAvailableFloors })
+        .eq('id', apartmentId);
+        
+      if (apartmentError) {
+        console.error('Error updating apartment availability:', apartmentError);
+      }
+      
+      // Update apartments state with new availability
+      setApartments(apartments.map(apt => 
+        apt.id === apartmentId 
+          ? { ...apt, is_available: hasAvailableFloors } 
+          : apt
+      ));
+      
+    } catch (error) {
+      console.error('Error toggling floor availability:', error);
+      alert('Failed to update floor availability. Please try again.');
+    } finally {
+      setUpdatingFloor(null);
+    }
+  };
+
   const handleCreateNew = () => {
     navigate('/owner/dashboard/new-listing');
   };
@@ -136,6 +225,42 @@ const MyListings = () => {
     }
   };
 
+  const toggleApartmentExpansion = (apartmentId) => {
+    if (expandedApartment === apartmentId) {
+      setExpandedApartment(null);
+    } else {
+      setExpandedApartment(apartmentId);
+      // Fetch floors if not already loaded
+      if (!apartmentFloors[apartmentId]) {
+        fetchApartmentFloors(apartmentId);
+      }
+    }
+  };
+
+  const getStatusBadge = (status) => {
+    const statusConfig = {
+      'available': { label: 'La Kireyn Karaa', color: 'bg-green-100 text-green-800', icon: '✓' },
+      'not_available': { label: 'Lama Heli Karo', color: 'bg-gray-100 text-gray-800', icon: '✕' },
+      'occupied': { label: 'La Kireeyay', color: 'bg-red-100 text-red-800', icon: '●' },
+      'maintenance': { label: 'Dayactir', color: 'bg-yellow-100 text-yellow-800', icon: '⚠' }
+    };
+    
+    const config = statusConfig[status] || statusConfig['not_available'];
+    
+    return (
+      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${config.color}`}>
+        <span className="mr-1">{config.icon}</span>
+        {config.label}
+      </span>
+    );
+  };
+
+  const getFloorLabel = (floorNumber, totalFloors) => {
+    if (floorNumber === 1) return 'Dabaqda Hoose';
+    if (floorNumber === totalFloors) return `Dabaqda ${floorNumber}aad (Sare)`;
+    return `Dabaqda ${floorNumber}aad`;
+  };
+
   if (loading) {
     return <LoadingSpinner />;
   }
@@ -155,14 +280,14 @@ const MyListings = () => {
       transition={{ duration: 0.3 }}
     >
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-xl font-semibold">My Apartment Listings</h2>
+        <h2 className="text-xl font-semibold">Liistada Guryahaaga</h2>
         <motion.button 
           onClick={handleCreateNew}
           className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
         >
-          Create New Listing
+          Samee Liis Cusub
         </motion.button>
       </div>
       
@@ -173,14 +298,14 @@ const MyListings = () => {
           animate={{ y: 0, opacity: 1 }}
           transition={{ duration: 0.4 }}
         >
-          <p className="text-gray-700 mb-4">You haven't created any apartment listings yet.</p>
+          <p className="text-gray-700 mb-4">Weli ma sameysan liis guri ah.</p>
           <motion.button 
             onClick={handleCreateNew}
             className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
           >
-            Create Your First Listing
+            Samee Liiskaaga Ugu Horeeyay
           </motion.button>
         </motion.div>
       ) : (
@@ -214,19 +339,19 @@ const MyListings = () => {
                           return getImageUrl(imageToUse.storage_path);
                         } catch (err) {
                           console.error('Error determining image URL:', err);
-                          return '/placeholder-apartment.jpg';
+                          return '/images/placeholder-apartment.svg';
                         }
                       })()}
                       alt={apartment.title}
                       className="w-full h-full object-cover transition-transform duration-300 hover:scale-110"
                       onError={(e) => {
                         console.error("Image failed to load:", e.target.src);
-                        e.target.src = '/placeholder-apartment.jpg';
+                        e.target.src = '/images/placeholder-apartment.svg';
                       }}
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center bg-gray-100">
-                      <p className="text-gray-500">No image</p>
+                      <p className="text-gray-500">Sawir ma jiro</p>
                     </div>
                   )}
                 </div>
@@ -245,42 +370,51 @@ const MyListings = () => {
                             ? 'bg-yellow-100 text-yellow-800'
                             : 'bg-red-100 text-red-800'
                       }`}>
-                        {apartment.status.charAt(0).toUpperCase() + apartment.status.slice(1)}
+                        {apartment.status === 'approved' ? 'La Ansixiyay' : 
+                         apartment.status === 'pending' ? 'Sugitaan' : 'La Diiday'}
                       </span>
                       <span className={`px-2 py-1 text-xs rounded-full ${
                         apartment.is_available 
                           ? 'bg-blue-100 text-blue-800'
                           : 'bg-gray-100 text-gray-800'
                       }`}>
-                        {apartment.is_available ? 'Available' : 'Not Available'}
+                        {apartment.is_available ? 'La Heli Karaa' : 'Lama Heli Karo'}
                       </span>
                     </div>
                   </div>
                   
                   <div className="mt-3 flex flex-wrap gap-2">
                     <div className="text-sm text-gray-700">
-                      <span className="font-medium">Price:</span> ${apartment.price_per_month}/month
+                      <span className="font-medium">Qiimaha:</span> ${apartment.price_per_month}/bishii
                     </div>
                     <div className="text-sm text-gray-700 ml-4">
-                      <span className="font-medium">Rooms:</span> {apartment.rooms}
+                      <span className="font-medium">Qolal:</span> {apartment.rooms}
                     </div>
                     <div className="text-sm text-gray-700 ml-4">
-                      <span className="font-medium">Bathrooms:</span> {apartment.bathrooms}
+                      <span className="font-medium">Musqul:</span> {apartment.bathrooms}
                     </div>
                   </div>
                   
                   <div className="mt-4 flex items-center justify-between">
                     <div className="text-sm text-gray-600">
-                      <span className="font-medium">Created:</span> {new Date(apartment.created_at).toLocaleDateString()}
+                      <span className="font-medium">La sameeyay:</span> {new Date(apartment.created_at).toLocaleDateString()}
                     </div>
                     <div className="flex space-x-2">
+                      <motion.button
+                        onClick={() => toggleApartmentExpansion(apartment.id)}
+                        className="px-3 py-1 bg-purple-100 text-purple-700 rounded-md hover:bg-purple-200 transition-colors text-sm"
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                      >
+                        {expandedApartment === apartment.id ? 'Qari Dabaqyada' : 'Muuji Dabaqyada'}
+                      </motion.button>
                       <motion.button
                         onClick={() => handleEdit(apartment.id)}
                         className="px-3 py-1 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors text-sm"
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
                       >
-                        Edit
+                        Wax ka beddel
                       </motion.button>
                       <motion.button
                         onClick={() => handleToggleAvailability(apartment)}
@@ -292,12 +426,64 @@ const MyListings = () => {
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
                       >
-                        {apartment.is_available ? 'Mark as Unavailable' : 'Mark as Available'}
+                        {apartment.is_available ? 'Ka dhig Lama Heli Karo' : 'Ka dhig La Heli Karaa'}
                       </motion.button>
                     </div>
                   </div>
                 </div>
               </div>
+              
+              {/* Floor Management Section */}
+              {expandedApartment === apartment.id && (
+                <motion.div 
+                  className="border-t border-gray-200 bg-gray-50 p-4"
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <h4 className="font-medium text-gray-800 mb-3">Maamulka Dabaqyada</h4>
+                  
+                  {apartmentFloors[apartment.id] ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {apartmentFloors[apartment.id].map((floor) => (
+                        <div key={floor.id} className="bg-white p-3 rounded-lg border border-gray-200">
+                          <div className="flex justify-between items-start mb-2">
+                            <div>
+                              <h5 className="font-medium text-gray-800">
+                                {getFloorLabel(floor.floor_number, apartmentFloors[apartment.id].length)}
+                              </h5>
+                              <p className="text-sm text-gray-600">${floor.price_per_month}/bishii</p>
+                            </div>
+                            {getStatusBadge(floor.floor_status)}
+                          </div>
+                          
+                          <div className="text-xs text-gray-500 mb-2">
+                            {floor.bedrooms_on_floor} qol jiif • {floor.bathrooms_on_floor} musqul
+                          </div>
+                          
+                          <button
+                            onClick={() => toggleFloorAvailability(apartment.id, floor.id, floor.floor_status)}
+                            disabled={updatingFloor === floor.id}
+                            className={`w-full px-2 py-1 text-xs rounded transition-colors ${
+                              updatingFloor === floor.id
+                                ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                                : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                            }`}
+                          >
+                            {updatingFloor === floor.id ? 'Waa la beddelayaa...' : 'Beddel Xaaladda'}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-4">
+                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
+                      <p className="text-sm text-gray-500 mt-2">Dabaqyada waa la soo raraa...</p>
+                    </div>
+                  )}
+                </motion.div>
+              )}
             </motion.div>
           ))}
         </div>
@@ -411,6 +597,7 @@ const Reviews = () => {
       
       // Clear the reply text
       setReplyText('');
+      setReplyingTo(null);
     } catch (error) {
       console.error('Error replying to review:', error);
       alert('Failed to reply to review. Please try again.');
@@ -437,22 +624,16 @@ const Reviews = () => {
       animate={{ opacity: 1 }}
       transition={{ duration: 0.3 }}
     >
-      <h2 className="text-xl font-semibold mb-6">Reviews for Your Properties</h2>
+      <h2 className="text-xl font-semibold mb-6">Faallooyinka Guryahaaga</h2>
       
-      {loading ? (
-        <LoadingSpinner />
-      ) : error ? (
-        <div className="bg-red-100 text-red-700 p-4 rounded-md">
-          <p>Error: {error}</p>
-        </div>
-      ) : reviews.length === 0 ? (
+      {reviews.length === 0 ? (
         <motion.div 
           className="bg-gray-50 p-6 rounded-lg text-center"
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ duration: 0.4 }}
         >
-          <p className="text-gray-600">You don't have any reviews for your properties yet.</p>
+          <p className="text-gray-600">Weli ma haysato faallo guryahaaga ah.</p>
         </motion.div>
       ) : (
         <div className="space-y-6">
@@ -466,7 +647,7 @@ const Reviews = () => {
             >
               <div className="mb-4">
                 <div className="flex justify-between">
-                  <h3 className="font-semibold">{review.apartments?.title || 'Unknown Property'}</h3>
+                  <h3 className="font-semibold">{review.apartments?.title || 'Guri aan la aqoon'}</h3>
                   <div className="flex">
                     {[...Array(5)].map((_, i) => (
                       <svg 
@@ -482,7 +663,7 @@ const Reviews = () => {
                   </div>
                 </div>
                 <p className="text-sm text-gray-600 mt-1">
-                  By: {review.profiles?.full_name || 'Anonymous'} | {new Date(review.created_at).toLocaleDateString()}
+                  Qoray: {review.profiles?.full_name || 'Qof aan la aqoon'} | {new Date(review.created_at).toLocaleDateString()}
                 </p>
               </div>
               
@@ -491,7 +672,7 @@ const Reviews = () => {
               {/* Owner Replies */}
               {review.review_replies && review.review_replies.length > 0 && (
                 <div className="bg-blue-50 p-4 rounded-md mb-4">
-                  <p className="font-medium text-gray-800 mb-1">Your Response:</p>
+                  <p className="font-medium text-gray-800 mb-1">Jawaabta Aad Bixisay:</p>
                   <p className="text-gray-700">{review.review_replies[0].reply_text}</p>
                   <p className="text-xs text-gray-500 mt-1">
                     {new Date(review.review_replies[0].created_at).toLocaleDateString()}
@@ -504,21 +685,24 @@ const Reviews = () => {
                 <div className="mt-4">
                   <div className="mb-2">
                     <textarea
-                      value={replyText}
-                      onChange={(e) => setReplyText(e.target.value)}
+                      value={replyingTo === review.id ? replyText : ''}
+                      onChange={(e) => {
+                        setReplyText(e.target.value);
+                        setReplyingTo(review.id);
+                      }}
                       className="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                       rows={3}
-                      placeholder="Write a reply to this review..."
+                      placeholder="Qor jawaab faallooyinkan..."
                     ></textarea>
                   </div>
                   <motion.button
                     onClick={() => handleReply(review.id)}
-                    disabled={submitting || !replyText.trim()}
+                    disabled={submitting || !replyText.trim() || replyingTo !== review.id}
                     className={`px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:bg-blue-300`}
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                   >
-                    {submitting ? 'Sending...' : 'Reply to Review'}
+                    {submitting && replyingTo === review.id ? 'Waa la diraa...' : 'Jawaab Faallada'}
                   </motion.button>
                 </div>
               ) : null}
@@ -534,504 +718,610 @@ const NewListing = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [submitSuccess, setSubmitSuccess] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
+  const [imageFiles, setImageFiles] = useState([]);
+  const [imagePreviews, setImagePreviews] = useState([]);
+  const [primaryImageIndex, setPrimaryImageIndex] = useState(0);
+  
+  // Debug log to verify component is rendering
+  console.log('NewListing component is rendering - floor system should be visible');
   
   // Form state
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [locationDescription, setLocationDescription] = useState('');
-  const [district, setDistrict] = useState('');
-  const [pricePerMonth, setPricePerMonth] = useState('');
-  const [rooms, setRooms] = useState(1);
-  const [bathrooms, setBathrooms] = useState(1);
-  const [isFurnished, setIsFurnished] = useState(false);
-  const [isAvailable, setIsAvailable] = useState(true);
-  const [images, setImages] = useState([]);
-  const [primaryImageIndex, setPrimaryImageIndex] = useState(0);
+  const [formData, setFormData] = useState({
+    title: '',
+    description: '',
+    location_description: '',
+    district: '',
+    is_furnished: false,
+    total_floors: 1,
+    has_floor_system: true
+  });
+  
+  // Floor data state
+  const [floors, setFloors] = useState([
+    {
+      floor_number: 1,
+      bedrooms_on_floor: 1,
+      bathrooms_on_floor: 1,
+      has_kitchen: true,
+      has_living_room: true,
+      price_per_month: '',
+      floor_description: '',
+      floor_status: 'available'
+    }
+  ]);
   
   // Mogadishu districts
   const districts = [
-    "Abdiaziz",
-    "Bondhere",
-    "Daynile",
-    "Dharkenley",
-    "Hamar Jajab",
-    "Hamar Weyne",
-    "Hodan",
-    "Howl Wadaag",
-    "Huriwa",
-    "Karan",
-    "Shangani",
-    "Shibis",
-    "Waberi",
-    "Wadajir",
-    "Warta Nabada",
-    "Yaqshid"
+    "Abdiaziz", "Bondhere", "Daynile", "Dharkenley", "Hamar Jajab", "Hamar Weyne",
+    "Hodan", "Howl Wadaag", "Huriwa", "Karan", "Shangani", "Shibis",
+    "Waberi", "Wadajir", "Warta Nabada", "Yaqshid"
   ];
-  
+
+  // Handle image selection
   const handleImageChange = (e) => {
     const files = Array.from(e.target.files);
-    if (files.length > 0) {
-      const newImages = files.map(file => ({
-        file,
-        preview: URL.createObjectURL(file),
-        name: file.name,
-        type: file.type
-      }));
-      setImages(prev => [...prev, ...newImages]);
-    }
-  };
-  
-  const removeImage = (index) => {
-    const newImages = [...images];
-    // Revoke the object URL to avoid memory leaks
-    URL.revokeObjectURL(newImages[index].preview);
-    newImages.splice(index, 1);
-    setImages(newImages);
+    if (files.length === 0) return;
     
-    // Adjust primary image index if needed
-    if (primaryImageIndex >= newImages.length) {
-      setPrimaryImageIndex(Math.max(0, newImages.length - 1));
-    } else if (index < primaryImageIndex) {
-      setPrimaryImageIndex(primaryImageIndex - 1);
+    // Limit to 10 images
+    const limitedFiles = files.slice(0, 10);
+    setImageFiles(prev => [...prev, ...limitedFiles].slice(0, 10));
+    
+    // Create previews
+    limitedFiles.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setImagePreviews(prev => [...prev, e.target.result].slice(0, 10));
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  // Remove image
+  const removeImage = (index) => {
+    setImageFiles(prev => prev.filter((_, i) => i !== index));
+    setImagePreviews(prev => prev.filter((_, i) => i !== index));
+    if (primaryImageIndex >= index && primaryImageIndex > 0) {
+      setPrimaryImageIndex(prev => prev - 1);
     }
   };
-  
-  const setPrimaryImage = (index) => {
-    setPrimaryImageIndex(index);
+
+  // Handle total floors change
+  const handleTotalFloorsChange = (newTotal) => {
+    const totalFloors = parseInt(newTotal);
+    setFormData(prev => ({ ...prev, total_floors: totalFloors }));
+    
+    // Update floors array
+    const newFloors = [];
+    for (let i = 1; i <= totalFloors; i++) {
+      const existingFloor = floors.find(f => f.floor_number === i);
+      if (existingFloor) {
+        newFloors.push(existingFloor);
+      } else {
+        newFloors.push({
+          floor_number: i,
+          bedrooms_on_floor: 1,
+          bathrooms_on_floor: 1,
+          has_kitchen: true,
+          has_living_room: true,
+          has_master_room: false,
+          price_per_month: formData.price_per_month || 100,
+          floor_description: '',
+          floor_status: 'available'
+        });
+      }
+    }
+    setFloors(newFloors);
   };
-  
+
+  // Update floor data
+  const updateFloor = (index, field, value) => {
+    setFloors(prev => prev.map((floor, i) => 
+      i === index ? { ...floor, [field]: value } : floor
+    ));
+  };
+
+  // Handle form submission
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (images.length < 4) {
-      setError('Please add at least 4 images of the apartment');
+    // Validation
+    if (!formData.title.trim()) {
+      alert('Fadlan gali magaca guriga');
       return;
+    }
+    
+    if (!formData.location_description.trim()) {
+      alert('Fadlan gali meesha guriga ku yaal');
+      return;
+    }
+    
+    if (!formData.district) {
+      alert('Fadlan dooro degmada');
+      return;
+    }
+    
+    if (imageFiles.length === 0) {
+      alert('Fadlan soo geli ugu yaraan hal sawir');
+      return;
+    }
+    
+    // Validate floors
+    for (let i = 0; i < floors.length; i++) {
+      const floor = floors[i];
+      if (!floor.price_per_month || floor.price_per_month <= 0) {
+        alert(`Fadlan gali qiimaha dabaqda ${i + 1}`);
+        return;
+      }
     }
     
     try {
       setLoading(true);
-      setError(null);
-      setUploadProgress(0);
       
-      // 1. Insert apartment record
-      const { data: apartment, error: apartmentError } = await supabase
-        .from('apartments')
-        .insert({
-          title,
-          description,
-          location_description: locationDescription,
-          district: district,
-          price_per_month: parseFloat(pricePerMonth),
-          rooms: parseInt(rooms),
-          bathrooms: parseInt(bathrooms),
-          is_furnished: isFurnished,
-          is_available: isAvailable,
-          status: 'pending', // All new listings start with pending status
+      // Calculate apartment-level data from floors
+      const totalRooms = floors.reduce((sum, floor) => sum + parseInt(floor.bedrooms_on_floor), 0);
+      const totalBathrooms = floors.reduce((sum, floor) => sum + parseInt(floor.bathrooms_on_floor), 0);
+      const minPrice = Math.min(...floors.map(f => parseFloat(f.price_per_month)));
+      
+      // Create apartment record
+      const apartmentData = {
+        title: formData.title.trim(),
+        description: formData.description.trim(),
+        location_description: formData.location_description.trim(),
+        district: formData.district,
+        rooms: totalRooms,
+        bathrooms: totalBathrooms,
+        price_per_month: minPrice,
+        is_furnished: formData.is_furnished,
+        is_available: true,
+        status: 'pending',
           owner_id: user.id,
-          created_at: new Date().toISOString(),
-        })
+        created_at: new Date().toISOString()
+      };
+      
+      const { data: apartmentResult, error: apartmentError } = await supabase
+        .from('apartments')
+        .insert(apartmentData)
         .select()
         .single();
       
       if (apartmentError) throw apartmentError;
       
-      // Progress: 20% complete after apartment creation
-      setUploadProgress(20);
+      const apartmentId = apartmentResult.id;
       
-      // 2. Upload images and create image records
-      const apartmentId = apartment.id;
-      let uploadedCount = 0;
-      const totalImages = images.length;
-      const progressPerImage = 75 / totalImages; // Allocate 75% of progress to image uploads (20-95%)
+      // Upload images
+      const imageUploadPromises = imageFiles.map(async (file, index) => {
+        const isPrimary = index === primaryImageIndex;
+        return uploadApartmentImage(file, apartmentId, isPrimary);
+      });
       
-      let primaryImagePath = null;
+      const imageResults = await Promise.all(imageUploadPromises);
       
-      for (let i = 0; i < images.length; i++) {
-        const image = images[i];
-        const isPrimary = i === primaryImageIndex;
+      // Check for image upload errors
+      const failedUploads = imageResults.filter(result => !result.success);
+      if (failedUploads.length > 0) {
+        console.error('Some images failed to upload:', failedUploads);
+      }
+      
+      // Create floor records
+      const floorData = floors.map(floor => ({
+        apartment_id: apartmentId,
+        floor_number: floor.floor_number,
+        bedrooms_on_floor: parseInt(floor.bedrooms_on_floor),
+        bathrooms_on_floor: parseInt(floor.bathrooms_on_floor),
+        has_kitchen: floor.has_kitchen,
+        has_living_room: floor.has_living_room,
+        price_per_month: parseFloat(floor.price_per_month),
+        floor_description: floor.floor_description.trim(),
+        floor_status: floor.floor_status,
+        is_available: floor.floor_status === 'available',
+        created_at: new Date().toISOString()
+      }));
+      
+      const { error: floorsError } = await supabase
+        .from('apartment_floors')
+        .insert(floorData);
         
-        try {
-          // Use the new utility function to upload the image
-          const { success, filePath, error } = await uploadApartmentImage(
-            image.file,
-            apartmentId,
-            isPrimary
-          );
-          
-          if (!success) {
-            console.error(`Error processing image ${i}:`, error);
-            continue;
-          }
-          
-          // Store primary image path for the apartment update
-          if (isPrimary) {
-            primaryImagePath = filePath;
-          }
-          
-          uploadedCount++;
-          // Calculate progress: 20% base + proportional progress for each image
-          const newProgress = Math.round(20 + (progressPerImage * uploadedCount));
-          setUploadProgress(newProgress);
-        } catch (error) {
-          console.error(`Error processing image ${i}:`, error);
-          // Continue with next image instead of stopping the whole process
-          continue;
-        }
-      }
+      if (floorsError) throw floorsError;
       
-      // If we have a primary image, update the apartment record with it
-      if (primaryImagePath) {
-        try {
-          const { error: updateError } = await supabase
-            .from('apartments')
-            .update({ primary_image_path: primaryImagePath })
-            .eq('id', apartmentId);
-            
-          if (updateError) {
-            console.log('Error updating primary image path:', updateError);
-          }
-        } catch (err) {
-          console.error('Error setting primary image on apartment:', err);
-        }
-      }
-      
-      // Set to 100% when completely done
-      setUploadProgress(100);
-      setSubmitSuccess(true);
-      
-      // Navigate back to listings page after a short delay
-      setTimeout(() => {
+      alert('Liiskaaga waa la sameeyay! Waxaa la diraa maamulka si ay u ansixiyaan.');
         navigate('/owner/dashboard');
-      }, 2000);
       
     } catch (error) {
-      console.error('Error creating listing:', error);
-      setError(error.message);
+      console.error('Error creating apartment:', error);
+      alert('Qalad ayaa dhacay. Fadlan isku day mar kale.');
     } finally {
       setLoading(false);
     }
   };
+
+  const getFloorLabel = (floorNumber) => {
+    if (floorNumber === 1) return 'Dabaqda Hoose';
+    if (floorNumber === floors.length) return `Dabaqda ${floorNumber}aad (Sare)`;
+    return `Dabaqda ${floorNumber}aad`;
+  };
   
   return (
-    <div className="max-w-4xl mx-auto">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold text-gray-800">Diiwaan-gelin Guryaha Cusub</h2>
-        <Link to="/owner/dashboard" className="text-blue-600 hover:underline flex items-center">
-          <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-          </svg>
-          Ku Noqo Liistada
-        </Link>
-      </div>
-      
-      {submitSuccess ? (
-        <div className="bg-green-100 text-green-700 p-6 rounded-lg mb-6">
-          <h3 className="font-semibold text-lg mb-2">Si Guul leh ayaa loo Diiwaan-geliyay!</h3>
-          <p>Diiwaan-gelintu waxay u gudbineysaa ansixinta. Marka la ogolaado, waxay u muuqan doontaa kireystayaasha suurtagalka ah.</p>
-          <div className="mt-4">
-            <Link to="/owner/dashboard" className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
-              Ku Noqo Bogga Maamulka
-            </Link>
-          </div>
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.3 }}
+      className="max-w-4xl mx-auto"
+    >
+      <div className="bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 rounded-2xl shadow-2xl border border-gray-700 overflow-hidden">
+        <div className="bg-gradient-to-r from-gray-800 via-gray-700 to-gray-800 px-6 py-6">
+          <h2 className="text-3xl font-bold text-white mb-2">✨ Samee Liis Cusub</h2>
+          <p className="text-gray-300 text-lg">Buuxi macluumaadka gurigaaga si aad u sameyso liis cusub</p>
         </div>
-      ) : (
-        <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-md overflow-hidden border border-gray-200">
-          {/* Steps indicator */}
-          <div className="bg-gray-50 border-b border-gray-200 px-6 py-4">
-            <div className="flex items-center justify-between max-w-2xl mx-auto">
-              <div className="flex flex-col items-center">
-                <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white font-medium">1</div>
-                <span className="text-xs mt-1 text-blue-600 font-medium">Macluumaadka Aasaasiga</span>
-              </div>
-              <div className="flex-grow h-1 bg-blue-200 mx-2"></div>
-              <div className="flex flex-col items-center">
-                <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white font-medium">2</div>
-                <span className="text-xs mt-1 text-blue-600 font-medium">Goobta</span>
-              </div>
-              <div className="flex-grow h-1 bg-blue-200 mx-2"></div>
-              <div className="flex flex-col items-center">
-                <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white font-medium">3</div>
-                <span className="text-xs mt-1 text-blue-600 font-medium">Sawirrada</span>
-              </div>
-            </div>
-          </div>
-          
-          <div className="p-6">
-            {error && (
-              <div className="bg-red-100 text-red-700 p-4 rounded-lg mb-6">
-                <p>{error}</p>
-              </div>
-            )}
+        
+        <form onSubmit={handleSubmit} className="p-8 space-y-8 bg-white">
+          {/* Basic Information */}
+          <div className="space-y-6">
+            <h3 className="text-lg font-semibold text-gray-800 border-b border-gray-200 pb-2">
+              Macluumaadka Aasaasiga ah
+            </h3>
             
-            <div className="mb-8">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">1. Macluumaadka Aasaasiga ah</h3>
-              
-              <div className="bg-gray-50 p-5 rounded-lg border border-gray-200">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-1">
-                      Cinwaanka Guriga *
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Magaca Guriga *
                     </label>
                     <input
-                      id="title"
                       type="text"
-                      value={title}
-                      onChange={(e) => setTitle(e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="tusaale: Guri Casri ah oo 2 qol leh oo ku yaala Hodan"
+                  value={formData.title}
+                  onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Tusaale: Guri Qurux badan oo Hodan ku yaal"
                       required
                     />
                   </div>
                   
                   <div>
-                    <label htmlFor="price" className="block text-sm font-medium text-gray-700 mb-1">
-                      Kirada Bishii (USD) *
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Degmada *
+                    </label>
+                <select
+                  value={formData.district}
+                  onChange={(e) => setFormData(prev => ({ ...prev, district: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      required
+                >
+                  <option value="">Dooro degmada</option>
+                  {districts.map(district => (
+                    <option key={district} value={district}>{district}</option>
+                  ))}
+                </select>
+              </div>
+                  </div>
+                  
+                  <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Meesha Guriga ku yaal *
                     </label>
                     <input
-                      id="price"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={pricePerMonth}
-                      onChange={(e) => setPricePerMonth(e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="tusaale: 300"
+                type="text"
+                value={formData.location_description}
+                onChange={(e) => setFormData(prev => ({ ...prev, location_description: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Tusaale: Wadada Makka Al-Mukarrama, agagaarka suuqa weyn"
                       required
                     />
                   </div>
                   
                   <div>
-                    <label htmlFor="rooms" className="block text-sm font-medium text-gray-700 mb-1">
-                      Qolalka jiifka *
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Faahfaahin Guriga
                     </label>
-                    <input
-                      id="rooms"
-                      type="number"
-                      min="1"
-                      value={rooms}
-                      onChange={(e) => setRooms(e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      required
+              <textarea
+                value={formData.description}
+                onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                rows={4}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Qor faahfaahin dheeraad ah oo ku saabsan guriga..."
                     />
                   </div>
                   
-                  <div>
-                    <label htmlFor="bathrooms" className="block text-sm font-medium text-gray-700 mb-1">
-                      Musqulaha *
-                    </label>
-                    <input
-                      id="bathrooms"
-                      type="number"
-                      min="1"
-                      step="0.5"
-                      value={bathrooms}
-                      onChange={(e) => setBathrooms(e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      required
-                    />
-                  </div>
-                  
-                  <div className="md:col-span-2">
-                    <label className="inline-flex items-center">
+            <div className="flex items-center">
                       <input
                         type="checkbox"
-                        checked={isFurnished}
-                        onChange={(e) => setIsFurnished(e.target.checked)}
-                        className="h-5 w-5 text-blue-600 rounded"
-                      />
-                      <span className="ml-2 text-sm font-medium text-gray-700">Alaab leh</span>
+                id="is_furnished"
+                checked={formData.is_furnished}
+                onChange={(e) => setFormData(prev => ({ ...prev, is_furnished: e.target.checked }))}
+                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+              />
+              <label htmlFor="is_furnished" className="ml-2 block text-sm text-gray-700">
+                Gurigu wuxuu leeyahay alaab (furnished)
                     </label>
-                  </div>
-                  
-                  <div className="md:col-span-2">
-                    <label className="inline-flex items-center">
-                      <input
-                        type="checkbox"
-                        checked={isAvailable}
-                        onChange={(e) => setIsAvailable(e.target.checked)}
-                        className="h-5 w-5 text-blue-600 rounded"
-                      />
-                      <span className="ml-2 text-sm font-medium text-gray-700">Currently Available</span>
-                    </label>
-                    <p className="mt-1 text-sm text-gray-500">
-                      Check this if the apartment is ready to rent now
-                    </p>
-                  </div>
-                </div>
               </div>
             </div>
             
-            <div className="mb-8">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">2. Faahfaahinta Goobta</h3>
-              
-              <div className="bg-gray-50 p-5 rounded-lg border border-gray-200">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Images Section */}
+          <div className="space-y-6">
+            <h3 className="text-lg font-semibold text-gray-800 border-b border-gray-200 pb-2">
+              Sawirrada Guriga
+            </h3>
+            
                   <div>
-                    <label htmlFor="district" className="block text-sm font-medium text-gray-700 mb-1">
-                      Degmada *
-                    </label>
-                    <select
-                      id="district"
-                      value={district}
-                      onChange={(e) => setDistrict(e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      required
-                    >
-                      <option value="">Dooro degmo</option>
-                      {districts.map(d => (
-                        <option key={d} value={d}>{d}</option>
-                      ))}
-                    </select>
-                  </div>
-                  
-                  <div className="md:col-span-2">
-                    <label htmlFor="location" className="block text-sm font-medium text-gray-700 mb-1">
-                      Goobta Faahfaahsan *
-                    </label>
-                    <input
-                      id="location"
-                      type="text"
-                      value={locationDescription}
-                      onChange={(e) => setLocationDescription(e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="tusaale: U dhow Peace Garden, 2 block ka fog Bakaaraha"
-                      required
-                    />
-                    <p className="mt-1 text-sm text-gray-500">
-                      Ku dar calaamado gaar ah ama waddooyinka si aad uga caawiso kireystayaasha inay si fudud u helaan hantidaada
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-            
-            <div className="mb-8">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">3. Sharraxaad</h3>
-              
-              <div className="bg-gray-50 p-5 rounded-lg border border-gray-200">
-                <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
-                  Sharraxaada Guriga *
-                </label>
-                <textarea
-                  id="description"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  rows={5}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Gurigaaga si faahfaahsan u sharax. Ku dar macluumaad ku saabsan adeegyada, xaafadda, xarumaha dhow, iwm."
-                  required
-                ></textarea>
-              </div>
-            </div>
-            
-            <div className="mb-8">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">4. Sawirrada Guriga</h3>
-              
-              <div className="bg-gray-50 p-5 rounded-lg border border-gray-200">
-                <div className="mb-4">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Soo Rar Sawirada * (Ugu yaraan 4 sawir ayaa loo baahan yahay)
+                Soo geli sawirrada guriga (ugu badan 10) *
                   </label>
-                  <p className="text-sm text-gray-500 mb-3">
-                    Riix sawir si aad uga dhigto sawirka koowaad (kaas oo marka hore la tusi doono)
-                  </p>
-                  
-                  <div className="flex items-center space-x-4 mb-4">
-                    <label className="cursor-pointer bg-blue-50 text-blue-600 px-4 py-3 rounded-lg hover:bg-blue-100 border border-blue-200 transition-colors flex items-center">
-                      <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                      </svg>
-                      <span className="font-medium">Ku Dar Sawiro</span>
                       <input
                         type="file"
                         multiple
                         accept="image/*"
                         onChange={handleImageChange}
-                        className="hidden"
-                      />
-                    </label>
-                    <span className={`text-sm ${images.length < 4 ? 'text-red-500 font-medium' : 'text-green-600'}`}>
-                      {images.length} {images.length === 1 ? 'sawir' : 'sawir'} la doortay
-                      {images.length < 4 && ` (waxaa loo baahan yahay ${4 - images.length} oo kale)`}
-                    </span>
-                  </div>
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Sawirka ugu horreeya ayaa noqon doona sawirka ugu muhiimsan
+              </p>
                 </div>
                 
-                {images.length > 0 && (
-                  <div>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 mt-2">
-                      {images.map((image, index) => (
-                        <div 
-                          key={index} 
-                          onClick={() => setPrimaryImage(index)}
-                          className={`relative rounded-lg overflow-hidden border-2 cursor-pointer transition-all ${
-                            index === primaryImageIndex ? 'border-blue-500 shadow-lg transform scale-105' : 'border-gray-200'
-                          }`}
-                        >
-                          <img
-                            src={image.preview}
+            {imagePreviews.length > 0 && (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {imagePreviews.map((preview, index) => (
+                  <div key={index} className="relative">
+                    <img
+                      src={preview}
                             alt={`Preview ${index + 1}`}
-                            className="w-full h-24 object-cover"
-                          />
-                          <div className="absolute inset-0 bg-black bg-opacity-0 hover:bg-opacity-20 transition-opacity flex items-center justify-center">
-                            <div className="absolute top-1 right-1">
+                      className={`w-full h-24 object-cover rounded-md border-2 ${
+                        index === primaryImageIndex ? 'border-blue-500' : 'border-gray-200'
+                      }`}
+                    />
+                    {index === primaryImageIndex && (
+                      <div className="absolute top-1 left-1 bg-blue-500 text-white text-xs px-1 rounded">
+                        Ugu muhiimsan
+                      </div>
+                    )}
                               <button
                                 type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  removeImage(index);
-                                }}
-                                className="bg-white rounded-full p-1 text-red-500 hover:text-red-700 shadow-md"
-                              >
-                                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" />
-                                </svg>
+                      onClick={() => removeImage(index)}
+                      className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600"
+                    >
+                      ×
                               </button>
-                            </div>
-                            {index === primaryImageIndex && (
-                              <span className="absolute bottom-0 left-0 right-0 bg-blue-600 text-white text-xs py-1 text-center">
-                                Sawirka Koowaad
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+              <button
+                      type="button"
+                      onClick={() => setPrimaryImageIndex(index)}
+                      className="absolute bottom-1 left-1 bg-gray-800 bg-opacity-75 text-white text-xs px-1 rounded hover:bg-opacity-100"
+                    >
+                      Ka dhig ugu muhiimsan
+              </button>
+            </div>
+                ))}
+          </div>
+      )}
+    </div>
+
+          {/* Floors Section */}
+          <div className="space-y-6 border-4 border-blue-500 bg-blue-50 p-6 rounded-lg">
+            <div className="flex items-center justify-between border-b border-gray-200 pb-2">
+              <h3 className="text-xl font-bold text-blue-800">
+                🏢 Dabaqyada Guriga (FLOOR SYSTEM)
+              </h3>
+              <div className="flex items-center space-x-2">
+                <label className="text-lg font-bold text-blue-800">
+                  Tirada dabaqyada: {formData.total_floors}
+                </label>
+                <select
+                  value={formData.total_floors}
+                  onChange={(e) => handleTotalFloorsChange(e.target.value)}
+                  className="px-3 py-2 border-2 border-blue-300 rounded-lg text-lg font-semibold bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  {[1,2,3,4,5,6,7,8,9,10].map(num => (
+                    <option key={num} value={num}>{num} dabaq</option>
+                  ))}
+                </select>
               </div>
             </div>
             
-            <div className="flex justify-end mt-6">
-              <button
-                type="submit"
-                disabled={loading || images.length < 4}
-                className={`px-6 py-3 text-white rounded-md relative ${
-                  loading || images.length < 4 
-                    ? 'bg-gray-400 cursor-not-allowed' 
-                    : 'bg-blue-600 hover:bg-blue-700'
-                } transition-colors`}
-              >
-                {loading ? (
-                  <div className="flex items-center space-x-2">
-                    <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    <span>La abuurayaa... {uploadProgress}%</span>
+            <div className="space-y-6">
+              {floors.map((floor, index) => (
+                <div key={index} className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <h4 className="font-medium text-gray-800 mb-4">
+                    {getFloorLabel(floor.floor_number)}
+                  </h4>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <svg className="w-4 h-4 inline mr-1 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 21l0-12" />
+                        </svg>
+                        Qolalka Jiifka
+                      </label>
+                      <select
+                        value={floor.bedrooms_on_floor}
+                        onChange={(e) => updateFloor(index, 'bedrooms_on_floor', e.target.value)}
+                        className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        {[1,2,3,4,5,6].map(num => (
+                          <option key={num} value={num}>{num}</option>
+                        ))}
+                      </select>
+              </div>
+              
+              <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <svg className="w-4 h-4 inline mr-1 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10v11M20 10v11" />
+                        </svg>
+                        Musqulaha
+                      </label>
+                      <select
+                        value={floor.bathrooms_on_floor}
+                        onChange={(e) => updateFloor(index, 'bathrooms_on_floor', e.target.value)}
+                        className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        {[1,2,3,4].map(num => (
+                          <option key={num} value={num}>{num}</option>
+                        ))}
+                      </select>
+              </div>
+              
+              <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        💰 Qiimaha bishii ($)
+                      </label>
+                      <input
+                        type="number"
+                        value={floor.price_per_month}
+                        onChange={(e) => updateFloor(index, 'price_per_month', e.target.value)}
+                        className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="100"
+                        min="1"
+                      />
+              </div>
+              </div>
+              
+                  {/* Amenities - Horizontal Row */}
+                  <div className="flex flex-wrap gap-3 mb-4">
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        checked={floor.has_kitchen}
+                        onChange={(e) => updateFloor(index, 'has_kitchen', e.target.checked)}
+                        className="mr-1"
+                      />
+                      <svg className="w-4 h-4 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4" />
+                      </svg>
+                      <label className="text-sm font-medium text-gray-700">Jikada</label>
+                    </div>
+                    
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        checked={floor.has_living_room}
+                        onChange={(e) => updateFloor(index, 'has_living_room', e.target.checked)}
+                        className="mr-1"
+                      />
+                      <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 21l0-12" />
+                      </svg>
+                      <label className="text-sm font-medium text-gray-700">Qolka Fadhiga</label>
+                    </div>
+                    
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        checked={floor.has_master_room}
+                        onChange={(e) => updateFloor(index, 'has_master_room', e.target.checked)}
+                        className="mr-1"
+                      />
+                      <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                      </svg>
+                      <label className="text-sm font-medium text-gray-700">Master Room</label>
+                    </div>
                   </div>
-                ) : (
-                  'Diiwaan-geli'
-                )}
-              </button>
+                  
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Xaaladda Dabaqda
+            </label>
+                    <select
+                      value={floor.floor_status}
+                      onChange={(e) => updateFloor(index, 'floor_status', e.target.value)}
+                      className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="available">La Kireyn Karaa</option>
+                      <option value="not_available">Lama Heli Karo</option>
+                      <option value="occupied">La Kireeyay</option>
+                      <option value="maintenance">Dayactir</option>
+                    </select>
+                        </div>
+                  
+            <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Faahfaahin Dabaqda
+                </label>
+                    <textarea
+                      value={floor.floor_description}
+                      onChange={(e) => updateFloor(index, 'floor_description', e.target.value)}
+                      rows={2}
+                      className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Faahfaahin dheeraad ah oo ku saabsan dabaqdan..."
+                    />
+                      </div>
+                    </div>
+                  ))}
             </div>
           </div>
+          
+          {/* Floor System Toggle */}
+          <div className="mb-6">
+            <label className="flex items-center">
+              <input
+                type="checkbox"
+                checked={formData.has_floor_system}
+                onChange={(e) => setFormData(prev => ({ ...prev, has_floor_system: e.target.checked }))}
+                className="mr-2"
+              />
+              <span className="text-sm font-medium text-gray-700">
+                Isticmaal nidaamka dabaqyada (Floor System)
+              </span>
+            </label>
+            <p className="text-xs text-gray-500 mt-1">
+              Haddii aad doorato, waxaad awood u yeelan doontaa inaad u qaybiiso gurigaaga dabaqyo kala duwan oo qiimo kala duwan leh.
+            </p>
+          </div>
+          
+          {/* Total Floors */}
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Tirada dabaqyada: {formData.total_floors}
+            </label>
+            <input
+              type="range"
+              min="1"
+              max="10"
+              value={formData.total_floors}
+              onChange={(e) => handleTotalFloorsChange(parseInt(e.target.value))}
+              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+            />
+            <div className="flex justify-between text-xs text-gray-500 mt-1">
+              <span>1 dabaq</span>
+              <span>10 dabaq</span>
+            </div>
+          </div>
+          
+          {/* Submit Button */}
+          <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
+            <Link
+              to="/owner/dashboard"
+              className="px-6 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              Jooji
+            </Link>
+            <motion.button
+              type="submit"
+              disabled={loading}
+              className={`px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex items-center space-x-2 ${
+                loading ? 'opacity-50 cursor-not-allowed' : ''
+              }`}
+              whileHover={{ scale: loading ? 1 : 1.05 }}
+              whileTap={{ scale: loading ? 1 : 0.95 }}
+            >
+              {loading ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  <span>Waa la sameynayaa...</span>
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  <span>Samee Liiska</span>
+                </>
+              )}
+            </motion.button>
+          </div>
         </form>
-      )}
     </div>
+    </motion.div>
   );
 };
 
@@ -1040,467 +1330,564 @@ const EditListing = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
-  const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [apartment, setApartment] = useState(null);
+  const [existingFloors, setExistingFloors] = useState([]);
+  const [existingImages, setExistingImages] = useState([]);
   
   // Form state
-  const [apartment, setApartment] = useState(null);
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [locationDescription, setLocationDescription] = useState('');
-  const [pricePerMonth, setPricePerMonth] = useState('');
-  const [rooms, setRooms] = useState(1);
-  const [bathrooms, setBathrooms] = useState(1);
-  const [isFurnished, setIsFurnished] = useState(false);
-  const [isAvailable, setIsAvailable] = useState(true);
-  const [existingImages, setExistingImages] = useState([]);
-  const [newImages, setNewImages] = useState([]);
-  const [primaryImageId, setPrimaryImageId] = useState(null);
+  const [formData, setFormData] = useState({
+    title: '',
+    description: '',
+    location_description: '',
+    district: '',
+    is_furnished: false,
+    total_floors: 1,
+    has_floor_system: true
+  });
+  
+  // Floor data state
+  const [floors, setFloors] = useState([]);
+  
+  // Image state
+  const [imageFiles, setImageFiles] = useState([]);
+  const [imagePreviews, setImagePreviews] = useState([]);
+  const [primaryImageIndex, setPrimaryImageIndex] = useState(0);
   const [imagesToDelete, setImagesToDelete] = useState([]);
-  const [uploadProgress, setUploadProgress] = useState(0);
+  
+  // Mogadishu districts
+  const districts = [
+    "Abdiaziz", "Bondhere", "Daynile", "Dharkenley", "Hamar Jajab", "Hamar Weyne",
+    "Hodan", "Howl Wadaag", "Huriwa", "Karan", "Shangani", "Shibis",
+    "Waberi", "Wadajir", "Warta Nabada", "Yaqshid"
+  ];
 
-  // Fetch apartment data
+  // Load existing apartment data
   useEffect(() => {
-    const fetchApartment = async () => {
+    const fetchApartmentData = async () => {
       try {
         setLoading(true);
         
-        const { data, error } = await supabase
+        // Fetch apartment data
+        const { data: apartmentData, error: apartmentError } = await supabase
           .from('apartments')
           .select(`
             *,
             apartment_images(id, storage_path, is_primary)
           `)
           .eq('id', id)
-          .eq('owner_id', user.id)
+          .eq('owner_id', user.id) // Ensure user owns this apartment
           .single();
         
-        if (error) throw error;
+        if (apartmentError) throw apartmentError;
+        if (!apartmentData) throw new Error('Apartment not found or you do not have permission to edit it');
         
-        if (!data) {
-          throw new Error('Apartment not found or you do not have permission to edit it');
-        }
+        setApartment(apartmentData);
         
-        setApartment(data);
-        setTitle(data.title || '');
-        setDescription(data.description || '');
-        setLocationDescription(data.location_description || '');
-        setPricePerMonth(data.price_per_month.toString() || '');
-        setRooms(data.rooms || 1);
-        setBathrooms(data.bathrooms || 1);
-        setIsFurnished(data.is_furnished || false);
-        setIsAvailable(data.is_available || true);
+        // Set form data
+        setFormData({
+          title: apartmentData.title || '',
+          description: apartmentData.description || '',
+          location_description: apartmentData.location_description || '',
+          district: apartmentData.district || '',
+          is_furnished: apartmentData.is_furnished || false,
+          total_floors: 1, // Will be updated when floors are loaded
+          has_floor_system: apartmentData.has_floor_system || true
+        });
         
-        if (data.apartment_images && data.apartment_images.length > 0) {
-          setExistingImages(data.apartment_images);
-          
-          // Find primary image
-          const primaryImage = data.apartment_images.find(img => img.is_primary);
-          if (primaryImage) {
-            setPrimaryImageId(primaryImage.id);
+        // Set existing images
+        if (apartmentData.apartment_images) {
+          setExistingImages(apartmentData.apartment_images);
+          // Find primary image index
+          const primaryIndex = apartmentData.apartment_images.findIndex(img => img.is_primary);
+          if (primaryIndex !== -1) {
+            setPrimaryImageIndex(primaryIndex);
           }
         }
+        
+        // Fetch floor data
+        const { data: floorsData, error: floorsError } = await supabase
+          .from('apartment_floors')
+          .select('*')
+          .eq('apartment_id', id)
+          .order('floor_number', { ascending: true });
+        
+        if (floorsError) throw floorsError;
+        
+        if (floorsData && floorsData.length > 0) {
+          setExistingFloors(floorsData);
+          setFloors(floorsData.map(floor => ({
+            id: floor.id, // Keep track of existing floor IDs
+            floor_number: floor.floor_number,
+            bedrooms_on_floor: floor.bedrooms_on_floor,
+            bathrooms_on_floor: floor.bathrooms_on_floor,
+            has_kitchen: floor.has_kitchen,
+            has_living_room: floor.has_living_room,
+            price_per_month: floor.price_per_month.toString(),
+            floor_description: floor.floor_description || '',
+            floor_status: floor.floor_status
+          })));
+          
+          setFormData(prev => ({ ...prev, total_floors: floorsData.length }));
+        } else {
+          // No floors exist, create default floor
+          setFloors([{
+            floor_number: 1,
+            bedrooms_on_floor: 1,
+            bathrooms_on_floor: 1,
+            has_kitchen: true,
+            has_living_room: true,
+            price_per_month: '',
+            floor_description: '',
+            floor_status: 'available'
+          }]);
+        }
+        
       } catch (error) {
-        console.error('Error fetching apartment:', error);
+        console.error('Error fetching apartment data:', error);
         setError(error.message);
       } finally {
         setLoading(false);
       }
     };
     
-    fetchApartment();
-  }, [id, user.id]);
+    if (id && user) {
+      fetchApartmentData();
+    }
+  }, [id, user]);
 
-  const handleNewImageChange = (e) => {
+  // Handle image selection
+  const handleImageChange = (e) => {
     const files = Array.from(e.target.files);
-    if (files.length > 0) {
-      const newImagesArray = files.map(file => ({
-        file,
-        preview: URL.createObjectURL(file),
-        name: file.name,
-        type: file.type
-      }));
-      setNewImages(prev => [...prev, ...newImagesArray]);
-    }
-  };
-  
-  const removeNewImage = (index) => {
-    const newImagesArray = [...newImages];
-    // Revoke the object URL to avoid memory leaks
-    URL.revokeObjectURL(newImagesArray[index].preview);
-    newImagesArray.splice(index, 1);
-    setNewImages(newImagesArray);
-  };
-  
-  const removeExistingImage = (imageId) => {
-    setImagesToDelete(prev => [...prev, imageId]);
-    setExistingImages(prev => prev.filter(img => img.id !== imageId));
+    if (files.length === 0) return;
     
-    // If the primary image is being deleted, set a new primary image
-    if (imageId === primaryImageId) {
-      const remainingImages = existingImages.filter(img => img.id !== imageId);
-      if (remainingImages.length > 0) {
-        setPrimaryImageId(remainingImages[0].id);
-      } else if (newImages.length > 0) {
-        setPrimaryImageId(null); // Will set one of the new images as primary
-      } else {
-        setPrimaryImageId(null);
-      }
-    }
-  };
-  
-  const setPrimaryExistingImage = (imageId) => {
-    setPrimaryImageId(imageId);
-  };
-  
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+    // Calculate current total images (existing + new)
+    const currentTotal = existingImages.length + imageFiles.length;
+    const remainingSlots = 10 - currentTotal;
     
-    if (existingImages.length === 0 && newImages.length === 0) {
-      setError('Please add at least one image of the apartment');
+    if (remainingSlots <= 0) {
+      alert('Waxaad soo gelin kartaa ugu badan 10 sawir');
       return;
     }
     
+    // Limit new files to remaining slots
+    const limitedFiles = files.slice(0, remainingSlots);
+    setImageFiles(prev => [...prev, ...limitedFiles]);
+    
+    // Create previews
+    limitedFiles.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setImagePreviews(prev => [...prev, e.target.result]);
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  // Remove existing image
+  const removeExistingImage = (index) => {
+    const imageToRemove = existingImages[index];
+    setImagesToDelete(prev => [...prev, imageToRemove.id]);
+    setExistingImages(prev => prev.filter((_, i) => i !== index));
+    
+    // Adjust primary image index if needed
+    if (primaryImageIndex >= index && primaryImageIndex > 0) {
+      setPrimaryImageIndex(prev => prev - 1);
+    } else if (primaryImageIndex === index) {
+      setPrimaryImageIndex(0);
+    }
+  };
+
+  // Remove new image
+  const removeNewImage = (index) => {
+    setImageFiles(prev => prev.filter((_, i) => i !== index));
+    setImagePreviews(prev => prev.filter((_, i) => i !== index));
+    
+    // Adjust primary image index for new images
+    const existingCount = existingImages.length;
+    const newImageIndex = index + existingCount;
+    
+    if (primaryImageIndex >= newImageIndex && primaryImageIndex > 0) {
+      setPrimaryImageIndex(prev => prev - 1);
+    } else if (primaryImageIndex === newImageIndex) {
+      setPrimaryImageIndex(0);
+    }
+  };
+
+  // Handle total floors change
+  const handleTotalFloorsChange = (newTotal) => {
+    const totalFloors = parseInt(newTotal);
+    setFormData(prev => ({ ...prev, total_floors: totalFloors }));
+    
+    // Update floors array
+    const newFloors = [];
+    for (let i = 1; i <= totalFloors; i++) {
+      const existingFloor = floors.find(f => f.floor_number === i);
+      if (existingFloor) {
+        newFloors.push(existingFloor);
+      } else {
+        newFloors.push({
+          floor_number: i,
+          bedrooms_on_floor: 1,
+          bathrooms_on_floor: 1,
+          has_kitchen: true,
+          has_living_room: true,
+          has_master_room: false,
+          price_per_month: formData.price_per_month || 100,
+          floor_description: '',
+          floor_status: 'available'
+        });
+      }
+    }
+    setFloors(newFloors);
+  };
+
+  // Update floor data
+  const updateFloor = (index, field, value) => {
+    setFloors(prev => prev.map((floor, i) => 
+      i === index ? { ...floor, [field]: value } : floor
+    ));
+  };
+
+  // Handle form submission
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    // Validation
+    if (!formData.title.trim()) {
+      alert('Fadlan gali magaca guriga');
+      return;
+    }
+    
+    if (!formData.location_description.trim()) {
+      alert('Fadlan gali meesha guriga ku yaal');
+      return;
+    }
+    
+    if (!formData.district) {
+      alert('Fadlan dooro degmada');
+      return;
+    }
+    
+    // Check if we have at least one image (existing or new)
+    if (existingImages.length === 0 && imageFiles.length === 0) {
+      alert('Fadlan soo geli ugu yaraan hal sawir');
+      return;
+    }
+    
+    // Validate floors
+    for (let i = 0; i < floors.length; i++) {
+      const floor = floors[i];
+      if (!floor.price_per_month || floor.price_per_month <= 0) {
+        alert(`Fadlan gali qiimaha dabaqda ${i + 1}`);
+        return;
+      }
+    }
+    
     try {
-      setSubmitting(true);
-      setError(null);
-      setUploadProgress(0);
+      setSaving(true);
       
-      // 1. Update apartment record
+      // Calculate apartment-level data from floors
+      const totalRooms = floors.reduce((sum, floor) => sum + parseInt(floor.bedrooms_on_floor), 0);
+      const totalBathrooms = floors.reduce((sum, floor) => sum + parseInt(floor.bathrooms_on_floor), 0);
+      const minPrice = Math.min(...floors.map(f => parseFloat(f.price_per_month)));
+      
+      // Update apartment record
+      const apartmentData = {
+        title: formData.title.trim(),
+        description: formData.description.trim(),
+        location_description: formData.location_description.trim(),
+        district: formData.district,
+        rooms: totalRooms,
+        bathrooms: totalBathrooms,
+        price_per_month: minPrice,
+        is_furnished: formData.is_furnished,
+        updated_at: new Date().toISOString()
+      };
+      
       const { error: apartmentError } = await supabase
         .from('apartments')
-        .update({
-          title,
-          description,
-          location_description: locationDescription,
-          price_per_month: parseFloat(pricePerMonth),
-          rooms: parseInt(rooms),
-          bathrooms: parseInt(bathrooms),
-          is_furnished: isFurnished,
-          is_available: isAvailable,
-          updated_at: new Date().toISOString(),
-        })
+        .update(apartmentData)
         .eq('id', id);
       
       if (apartmentError) throw apartmentError;
       
-      // Base progress: 10% after apartment update
-      setUploadProgress(10);
-      
-      // 2. Delete images that should be removed
+      // Delete marked images
       if (imagesToDelete.length > 0) {
         const { error: deleteError } = await supabase
           .from('apartment_images')
           .delete()
           .in('id', imagesToDelete);
         
-        if (deleteError) throw deleteError;
-      }
-      
-      // Track the primary image path
-      let primaryImagePath = null;
-      
-      // Progress: 20% after deletions
-      setUploadProgress(20);
-      
-      // 3. Set primary image for existing images
-      if (primaryImageId && existingImages.length > 0) {
-        // First, set all to not primary
-        const { error: resetPrimaryError } = await supabase
-          .from('apartment_images')
-          .update({ is_primary: false })
-          .eq('apartment_id', id);
-        
-        if (resetPrimaryError) throw resetPrimaryError;
-        
-        // Then set the selected image as primary
-        const { error: setPrimaryError } = await supabase
-          .from('apartment_images')
-          .update({ is_primary: true })
-          .eq('id', primaryImageId);
-        
-        if (setPrimaryError) throw setPrimaryError;
-        
-        // Get the path of the primary image for the apartment record
-        const primaryImage = existingImages.find(img => img.id === primaryImageId);
-        if (primaryImage) {
-          primaryImagePath = primaryImage.storage_path;
+        if (deleteError) {
+          console.error('Error deleting images:', deleteError);
         }
       }
       
-      // Progress: 30% after setting primary
-      setUploadProgress(30);
-      
-      // 4. Upload and add new images
-      if (newImages.length > 0) {
-        let uploadedCount = 0;
-        const progressPerImage = 65 / newImages.length; // Allocate 65% of remaining progress (30-95%)
-        const shouldSetNewPrimary = existingImages.length === 0 || (!primaryImageId && imagesToDelete.length === existingImages.length);
+      // Upload new images
+      if (imageFiles.length > 0) {
+        const imageUploadPromises = imageFiles.map(async (file, index) => {
+          const totalExistingImages = existingImages.length;
+          const isPrimary = (index + totalExistingImages) === primaryImageIndex;
+          return uploadApartmentImage(file, id, isPrimary);
+        });
         
-        for (let i = 0; i < newImages.length; i++) {
-          const image = newImages[i];
-          const isPrimary = shouldSetNewPrimary && i === 0;
-          
-          try {
-            // Use the new utility function to upload the image
-            const { success, filePath, error } = await uploadApartmentImage(
-              image.file,
-              id,
-              isPrimary
-            );
-            
-            if (!success) {
-              console.error(`Error processing image ${i}:`, error);
-              continue;
-            }
-            
-            // If this is the primary image and we don't have one from existing images
-            if (isPrimary && !primaryImagePath) {
-              primaryImagePath = filePath;
-            }
-            
-            uploadedCount++;
-            // Calculate progress: 30% base + proportional progress for each image
-            const newProgress = Math.round(30 + (progressPerImage * uploadedCount));
-            setUploadProgress(newProgress);
-          } catch (error) {
-            console.error(`Error processing image ${i}:`, error);
-            continue;
-          }
+        const imageResults = await Promise.all(imageUploadPromises);
+        
+        // Check for image upload errors
+        const failedUploads = imageResults.filter(result => !result.success);
+        if (failedUploads.length > 0) {
+          console.error('Some images failed to upload:', failedUploads);
         }
       }
       
-      // Update the apartment with the primary image path if available
-      if (primaryImagePath) {
-        try {
+      // Update primary image status for existing images if needed
+      if (primaryImageIndex < existingImages.length) {
+        // Primary is an existing image, update all existing images
+        const updatePromises = existingImages.map(async (img, index) => {
+          const isPrimary = index === primaryImageIndex;
+          return supabase
+            .from('apartment_images')
+            .update({ is_primary: isPrimary })
+            .eq('id', img.id);
+        });
+        
+        await Promise.all(updatePromises);
+      }
+      
+      // Handle floor updates
+      const existingFloorIds = existingFloors.map(f => f.id);
+      const currentFloorIds = floors.filter(f => f.id).map(f => f.id);
+      
+      // Delete floors that were removed
+      const floorsToDelete = existingFloorIds.filter(id => !currentFloorIds.includes(id));
+      if (floorsToDelete.length > 0) {
+        const { error: deleteFloorsError } = await supabase
+          .from('apartment_floors')
+          .delete()
+          .in('id', floorsToDelete);
+        
+        if (deleteFloorsError) throw deleteFloorsError;
+      }
+      
+      // Update or insert floors
+      for (const floor of floors) {
+        const floorData = {
+          apartment_id: id,
+          floor_number: floor.floor_number,
+          bedrooms_on_floor: parseInt(floor.bedrooms_on_floor),
+          bathrooms_on_floor: parseInt(floor.bathrooms_on_floor),
+          has_kitchen: floor.has_kitchen,
+          has_living_room: floor.has_living_room,
+          price_per_month: parseFloat(floor.price_per_month),
+          floor_description: floor.floor_description.trim(),
+          floor_status: floor.floor_status,
+          is_available: floor.floor_status === 'available',
+          updated_at: new Date().toISOString()
+        };
+        
+        if (floor.id) {
+          // Update existing floor
           const { error: updateError } = await supabase
-            .from('apartments')
-            .update({ primary_image_path: primaryImagePath })
-            .eq('id', id);
-            
-          if (updateError) {
-            console.log('Error updating primary image path:', updateError);
-          }
-        } catch (err) {
-          console.error('Error setting primary image on apartment:', err);
+            .from('apartment_floors')
+            .update(floorData)
+            .eq('id', floor.id);
+          
+          if (updateError) throw updateError;
+        } else {
+          // Insert new floor
+          const { error: insertError } = await supabase
+            .from('apartment_floors')
+            .insert({ ...floorData, created_at: new Date().toISOString() });
+          
+          if (insertError) throw insertError;
         }
       }
       
-      // Set to 100% when completely done
-      setUploadProgress(100);
-      setSubmitSuccess(true);
-      
-      // Navigate back to listings page after a short delay
-      setTimeout(() => {
-        navigate('/owner/dashboard');
-      }, 2000);
+      alert('Liiskaaga waa la cusboonaysiinayay!');
+      navigate('/owner/dashboard');
       
     } catch (error) {
-      console.error('Error updating listing:', error);
-      setError(error.message);
+      console.error('Error updating apartment:', error);
+      alert('Qalad ayaa dhacay. Fadlan isku day mar kale.');
     } finally {
-      setSubmitting(false);
+      setSaving(false);
     }
   };
-  
+
+  const getFloorLabel = (floorNumber) => {
+    if (floorNumber === 1) return 'Dabaqda Hoose';
+    if (floorNumber === floors.length) return `Dabaqda ${floorNumber}aad (Sare)`;
+    return `Dabaqda ${floorNumber}aad`;
+  };
+
   if (loading) {
-    return <LoadingSpinner />;
-  }
-  
-  if (error && !apartment) {
     return (
-      <div className="bg-red-100 text-red-700 p-4 rounded-md">
-        <p>{error}</p>
-        <Link to="/owner/dashboard" className="mt-4 inline-block text-blue-600 hover:underline">
-          Back to Dashboard
-        </Link>
+      <div className="flex justify-center items-center py-12">
+        <LoadingSpinner />
       </div>
     );
   }
 
+  if (error) {
   return (
-    <div className="max-w-4xl mx-auto">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-xl font-semibold">Edit Apartment Listing</h2>
-        <Link to="/owner/dashboard" className="text-blue-600 hover:underline">
-          &larr; Back to Listings
-        </Link>
-      </div>
-      
-      {submitSuccess ? (
-        <div className="bg-green-100 text-green-700 p-4 rounded-lg mb-6">
-          <h3 className="font-semibold text-lg mb-2">Listing Updated Successfully!</h3>
-          <p>Your changes have been saved. If you made significant changes, the listing may need to be re-approved.</p>
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.3 }}
+        className="text-center py-12"
+      >
+        <div className="bg-red-100 text-red-700 p-6 rounded-lg mb-6">
+          <h2 className="text-xl font-semibold mb-2">Qalad</h2>
+          <p>{error}</p>
         </div>
-      ) : (
-        <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-md overflow-hidden border border-gray-200 p-6">
-          {error && (
-            <div className="bg-red-100 text-red-700 p-4 rounded-lg mb-6">
-              <p>{error}</p>
-            </div>
-          )}
-          
-          <div className="mb-6">
-            <h3 className="text-lg font-medium border-b border-gray-200 pb-2 mb-4">Basic Information</h3>
+        <Link 
+          to="/owner/dashboard"
+          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+        >
+          Ku Noqo Liistada
+        </Link>
+      </motion.div>
+    );
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.3 }}
+      className="max-w-4xl mx-auto"
+    >
+      <div className="bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 rounded-2xl shadow-2xl border border-gray-700 overflow-hidden">
+        <div className="bg-gradient-to-r from-gray-800 via-gray-700 to-gray-800 px-6 py-6">
+          <h2 className="text-3xl font-bold text-white mb-2">🔧 Wax ka beddel Liiska</h2>
+          <p className="text-gray-300 text-lg">Cusboonaysii macluumaadka gurigaaga</p>
+        </div>
+        
+        <form onSubmit={handleSubmit} className="p-8 space-y-8 bg-white">
+          {/* Basic Information */}
+          <div className="space-y-6">
+            <h3 className="text-lg font-semibold text-gray-800 border-b border-gray-200 pb-2">
+              Macluumaadka Aasaasiga ah
+            </h3>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-1">
-                  Apartment Title *
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Magaca Guriga *
                 </label>
                 <input
-                  id="title"
                   type="text"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={formData.title}
+                  onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                  placeholder="Tusaale: Guri Qurux badan oo Hodan ku yaal"
                   required
                 />
               </div>
               
               <div>
-                <label htmlFor="price" className="block text-sm font-medium text-gray-700 mb-1">
-                  Monthly Rent (USD) *
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Degmada *
                 </label>
-                <input
-                  id="price"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={pricePerMonth}
-                  onChange={(e) => setPricePerMonth(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                <select
+                  value={formData.district}
+                  onChange={(e) => setFormData(prev => ({ ...prev, district: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
                   required
-                />
+                >
+                  <option value="">Dooro degmada</option>
+                  {districts.map(district => (
+                    <option key={district} value={district}>{district}</option>
+                  ))}
+                </select>
               </div>
-              
-              <div>
-                <label htmlFor="rooms" className="block text-sm font-medium text-gray-700 mb-1">
-                  Bedrooms *
-                </label>
-                <input
-                  id="rooms"
-                  type="number"
-                  min="1"
-                  value={rooms}
-                  onChange={(e) => setRooms(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-              
-              <div>
-                <label htmlFor="bathrooms" className="block text-sm font-medium text-gray-700 mb-1">
-                  Bathrooms *
-                </label>
-                <input
-                  id="bathrooms"
-                  type="number"
-                  min="1"
-                  step="0.5"
-                  value={bathrooms}
-                  onChange={(e) => setBathrooms(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-              
-              <div className="flex items-end">
-                <div>
-                  <label className="inline-flex items-center">
-                    <input
-                      type="checkbox"
-                      checked={isFurnished}
-                      onChange={(e) => setIsFurnished(e.target.checked)}
-                      className="h-5 w-5 text-blue-600 rounded"
-                    />
-                    <span className="ml-2 text-sm font-medium text-gray-700">Alaab leh</span>
-                  </label>
-                </div>
-              </div>
-              
-              <div className="flex items-end">
-                <div>
-                  <label className="inline-flex items-center">
-                    <input
-                      type="checkbox"
-                      checked={isAvailable}
-                      onChange={(e) => setIsAvailable(e.target.checked)}
-                      className="h-5 w-5 text-blue-600 rounded"
-                    />
-                    <span className="ml-2 text-sm font-medium text-gray-700">Currently Available</span>
-                  </label>
-                  <p className="mt-1 text-sm text-gray-500">
-                    Check this if the apartment is ready to rent now
-                  </p>
-                </div>
-              </div>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Meesha Guriga ku yaal *
+              </label>
+              <input
+                type="text"
+                value={formData.location_description}
+                onChange={(e) => setFormData(prev => ({ ...prev, location_description: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                placeholder="Tusaale: Wadada Makka Al-Mukarrama, agagaarka suuqa weyn"
+                required
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Faahfaahin Guriga
+              </label>
+              <textarea
+                value={formData.description}
+                onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                rows={4}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                placeholder="Qor faahfaahin dheeraad ah oo ku saabsan guriga..."
+              />
+            </div>
+            
+            <div className="flex items-center">
+              <input
+                type="checkbox"
+                id="is_furnished"
+                checked={formData.is_furnished}
+                onChange={(e) => setFormData(prev => ({ ...prev, is_furnished: e.target.checked }))}
+                className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+              />
+              <label htmlFor="is_furnished" className="ml-2 block text-sm text-gray-700">
+                Gurigu wuxuu leeyahay alaab (furnished)
+              </label>
             </div>
           </div>
           
-          <div className="mb-6">
-            <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
-              Apartment Description *
-            </label>
-            <textarea
-              id="description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={5}
-              className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
-            ></textarea>
-          </div>
-          
-          <div className="mb-6">
-            <h3 className="text-lg font-medium border-b border-gray-200 pb-2 mb-4">Apartment Images</h3>
+          {/* Images Section */}
+          <div className="space-y-6">
+            <h3 className="text-lg font-semibold text-gray-800 border-b border-gray-200 pb-2">
+              Sawirrada Guriga
+            </h3>
             
             {/* Existing Images */}
             {existingImages.length > 0 && (
-              <div className="mb-6">
-                <h4 className="text-sm font-medium text-gray-700 mb-2">Current Images</h4>
-                <p className="text-sm text-gray-500 mb-3">Click on an image to set it as the primary image</p>
-                
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                  {existingImages.map((image) => (
-                    <div 
-                      key={image.id} 
-                      className={`relative rounded-lg overflow-hidden border-2 ${
-                        image.id === primaryImageId ? 'border-blue-500' : 'border-gray-200'
-                      }`}
-                    >
+              <div>
+                <h4 className="text-md font-medium text-gray-700 mb-3">Sawirrada Jira</h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                  {existingImages.map((image, index) => (
+                    <div key={image.id} className="relative">
                       <img
                         src={getImageUrl(image.storage_path)}
-                        alt="Apartment"
-                        className="w-full h-24 object-cover"
-                        onClick={() => setPrimaryExistingImage(image.id)}
+                        alt={`Existing ${index + 1}`}
+                        className={`w-full h-24 object-cover rounded-md border-2 ${
+                          index === primaryImageIndex ? 'border-green-500' : 'border-gray-200'
+                        }`}
                         onError={(e) => {
-                          console.error("Image failed to load:", e.target.src);
-                          e.target.src = '/placeholder-apartment.jpg';
+                          e.target.src = '/images/placeholder-apartment.svg';
                         }}
                       />
-                      <div className="absolute inset-0 bg-black bg-opacity-0 hover:bg-opacity-30 transition-opacity flex items-center justify-center">
-                        <div className="absolute top-0 right-0 p-1">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              removeExistingImage(image.id);
-                            }}
-                            className="bg-white rounded-full p-1 text-red-500 hover:text-red-700"
-                          >
-                            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-                              <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                            </svg>
-                          </button>
+                      {index === primaryImageIndex && (
+                        <div className="absolute top-1 left-1 bg-green-500 text-white text-xs px-1 rounded">
+                          Ugu muhiimsan
                         </div>
-                        {image.id === primaryImageId && (
-                          <span className="absolute bottom-0 left-0 bg-blue-500 text-white px-2 py-1 text-xs">
-                            Primary
-                          </span>
-                        )}
-                      </div>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => removeExistingImage(index)}
+                        className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600"
+                      >
+                        ×
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPrimaryImageIndex(index)}
+                        className="absolute bottom-1 left-1 bg-gray-800 bg-opacity-75 text-white text-xs px-1 rounded hover:bg-opacity-100"
+                      >
+                        Ka dhig ugu muhiimsan
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -1509,80 +1896,294 @@ const EditListing = () => {
             
             {/* New Images */}
             <div>
-              <h4 className="text-sm font-medium text-gray-700 mb-2">Add New Images</h4>
-              
-              <div className="flex items-center space-x-4 mb-4">
-                <label className="cursor-pointer bg-blue-100 text-blue-600 px-4 py-2 rounded-lg hover:bg-blue-200 transition-colors">
-                  <span>Add Images</span>
-                  <input
-                    type="file"
-                    multiple
-                    accept="image/*"
-                    onChange={handleNewImageChange}
-                    className="hidden"
-                  />
-                </label>
-                <span className="text-sm text-gray-500">
-                  {newImages.length} new {newImages.length === 1 ? 'image' : 'images'} selected
-                </span>
-              </div>
-              
-              {newImages.length > 0 && (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 mt-2">
-                  {newImages.map((image, index) => (
-                    <div 
-                      key={index} 
-                      className="relative rounded-lg overflow-hidden border-2 border-gray-200"
-                    >
-                      <img
-                        src={image.preview}
-                        alt={`Preview ${index + 1}`}
-                        className="w-full h-24 object-cover"
-                      />
-                      <div className="absolute top-0 right-0 p-1">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Soo geli sawirro cusub (ugu badan {10 - existingImages.length - imageFiles.length})
+              </label>
+              <input
+                type="file"
+                multiple
+                accept="image/*"
+                onChange={handleImageChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                disabled={existingImages.length + imageFiles.length >= 10}
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Wadarta sawirrada: {existingImages.length + imageFiles.length}/10
+              </p>
+            </div>
+            
+            {imagePreviews.length > 0 && (
+              <div>
+                <h4 className="text-md font-medium text-gray-700 mb-3">Sawirrada Cusub</h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {imagePreviews.map((preview, index) => {
+                    const totalIndex = existingImages.length + index;
+                    return (
+                      <div key={index} className="relative">
+                        <img
+                          src={preview}
+                          alt={`New Preview ${index + 1}`}
+                          className={`w-full h-24 object-cover rounded-md border-2 ${
+                            totalIndex === primaryImageIndex ? 'border-green-500' : 'border-gray-200'
+                          }`}
+                        />
+                        {totalIndex === primaryImageIndex && (
+                          <div className="absolute top-1 left-1 bg-green-500 text-white text-xs px-1 rounded">
+                            Ugu muhiimsan
+                          </div>
+                        )}
                         <button
                           type="button"
                           onClick={() => removeNewImage(index)}
-                          className="bg-white rounded-full p-1 text-red-500 hover:text-red-700"
+                          className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600"
                         >
-                          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-                            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                          </svg>
+                          ×
                         </button>
+                        <button
+                          type="button"
+                          onClick={() => setPrimaryImageIndex(totalIndex)}
+                          className="absolute bottom-1 left-1 bg-gray-800 bg-opacity-75 text-white text-xs px-1 rounded hover:bg-opacity-100"
+                        >
+                          Ka dhig ugu muhiimsan
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Floors Section */}
+          <div className="space-y-6 border-4 border-green-500 bg-green-50 p-6 rounded-lg">
+            <div className="flex items-center justify-between border-b border-gray-200 pb-2">
+              <h3 className="text-xl font-bold text-green-800">
+                🏢 Dabaqyada Guriga (FLOOR SYSTEM)
+              </h3>
+              <div className="flex items-center space-x-2">
+                <label className="text-sm font-medium text-gray-700">
+                  Tirada dabaqyada:
+                </label>
+                <select
+                  value={formData.total_floors}
+                  onChange={(e) => handleTotalFloorsChange(e.target.value)}
+                  className="px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                >
+                  {[1,2,3,4,5,6,7,8,9,10].map(num => (
+                    <option key={num} value={num}>{num}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            
+            <div className="space-y-6">
+              {floors.map((floor, index) => (
+                <div key={index} className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <h4 className="font-medium text-gray-800 mb-4">
+                    {getFloorLabel(floor.floor_number)}
+                  </h4>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <svg className="w-4 h-4 inline mr-1 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 21l0-12" />
+                        </svg>
+                        Qolalka Jiifka
+                      </label>
+                      <select
+                        value={floor.bedrooms_on_floor}
+                        onChange={(e) => updateFloor(index, 'bedrooms_on_floor', e.target.value)}
+                        className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        {[1,2,3,4,5,6].map(num => (
+                          <option key={num} value={num}>{num}</option>
+                        ))}
+                      </select>
+              </div>
+              
+              <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <svg className="w-4 h-4 inline mr-1 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10v11M20 10v11" />
+                        </svg>
+                        Musqulaha
+                      </label>
+                      <select
+                        value={floor.bathrooms_on_floor}
+                        onChange={(e) => updateFloor(index, 'bathrooms_on_floor', e.target.value)}
+                        className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        {[1,2,3,4].map(num => (
+                          <option key={num} value={num}>{num}</option>
+                        ))}
+                      </select>
+              </div>
+              
+              <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        💰 Qiimaha bishii ($)
+                      </label>
+                      <input
+                        type="number"
+                        value={floor.price_per_month}
+                        onChange={(e) => updateFloor(index, 'price_per_month', e.target.value)}
+                        className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="100"
+                        min="1"
+                      />
+              </div>
+              </div>
+              
+                  {/* Amenities - Horizontal Row */}
+                  <div className="flex flex-wrap gap-3 mb-4">
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        checked={floor.has_kitchen}
+                        onChange={(e) => updateFloor(index, 'has_kitchen', e.target.checked)}
+                        className="mr-1"
+                      />
+                      <svg className="w-4 h-4 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4" />
+                      </svg>
+                      <label className="text-sm font-medium text-gray-700">Jikada</label>
+                    </div>
+                    
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        checked={floor.has_living_room}
+                        onChange={(e) => updateFloor(index, 'has_living_room', e.target.checked)}
+                        className="mr-1"
+                      />
+                      <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 21l0-12" />
+                      </svg>
+                      <label className="text-sm font-medium text-gray-700">Qolka Fadhiga</label>
+                    </div>
+                    
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        checked={floor.has_master_room}
+                        onChange={(e) => updateFloor(index, 'has_master_room', e.target.checked)}
+                        className="mr-1"
+                      />
+                      <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                      </svg>
+                      <label className="text-sm font-medium text-gray-700">Master Room</label>
+                    </div>
+                  </div>
+                  
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Xaaladda Dabaqda
+            </label>
+                    <select
+                      value={floor.floor_status}
+                      onChange={(e) => updateFloor(index, 'floor_status', e.target.value)}
+                      className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="available">La Kireyn Karaa</option>
+                      <option value="not_available">Lama Heli Karo</option>
+                      <option value="occupied">La Kireeyay</option>
+                      <option value="maintenance">Dayactir</option>
+                    </select>
+                        </div>
+                  
+            <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Faahfaahin Dabaqda
+                </label>
+                    <textarea
+                      value={floor.floor_description}
+                      onChange={(e) => updateFloor(index, 'floor_description', e.target.value)}
+                      rows={2}
+                      className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Faahfaahin dheeraad ah oo ku saabsan dabaqdan..."
+                    />
                       </div>
                     </div>
                   ))}
-                </div>
-              )}
             </div>
           </div>
           
-          <div className="flex justify-end mt-6">
-            <button
-              type="submit"
-              disabled={submitting}
-              className={`px-6 py-3 text-white rounded-md relative ${
-                submitting 
-                  ? 'bg-gray-400 cursor-not-allowed' 
-                  : 'bg-blue-600 hover:bg-blue-700'
-              } transition-colors`}
+          {/* Floor System Toggle */}
+          <div className="mb-6">
+            <label className="flex items-center">
+              <input
+                type="checkbox"
+                checked={formData.has_floor_system}
+                onChange={(e) => setFormData(prev => ({ ...prev, has_floor_system: e.target.checked }))}
+                className="mr-2"
+              />
+              <span className="text-sm font-medium text-gray-700">
+                Isticmaal nidaamka dabaqyada (Floor System)
+              </span>
+            </label>
+            <p className="text-xs text-gray-500 mt-1">
+              Haddii aad doorato, waxaad awood u yeelan doontaa inaad u qaybiiso gurigaaga dabaqyo kala duwan oo qiimo kala duwan leh.
+            </p>
+          </div>
+          
+          {/* Total Floors */}
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Tirada dabaqyada: {formData.total_floors}
+            </label>
+            <input
+              type="range"
+              min="1"
+              max="10"
+              value={formData.total_floors}
+              onChange={(e) => handleTotalFloorsChange(parseInt(e.target.value))}
+              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+            />
+            <div className="flex justify-between text-xs text-gray-500 mt-1">
+              <span>1 dabaq</span>
+              <span>10 dabaq</span>
+            </div>
+          </div>
+          
+          {/* Submit Button */}
+          <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
+            <Link
+              to="/owner/dashboard"
+              className="px-6 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
             >
-              {submitting ? (
-                <div className="flex items-center space-x-2">
-                  <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  <span>Updating... {uploadProgress > 0 ? `${uploadProgress}%` : ''}</span>
-                </div>
+              Jooji
+            </Link>
+            <motion.button
+              type="submit"
+              disabled={saving}
+              className={`px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors flex items-center space-x-2 ${
+                saving ? 'opacity-50 cursor-not-allowed' : ''
+              }`}
+              whileHover={{ scale: saving ? 1 : 1.05 }}
+              whileTap={{ scale: saving ? 1 : 0.95 }}
+            >
+              {saving ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  <span>Waa la cusboonaysiinayaa...</span>
+                </>
               ) : (
-                'Save Changes'
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span>Cusboonaysii Liiska</span>
+                </>
               )}
-            </button>
+            </motion.button>
           </div>
         </form>
-      )}
-    </div>
+      </div>
+    </motion.div>
   );
 };
 
@@ -1643,7 +2244,7 @@ export default function OwnerDashboard() {
                 onClick={() => handleTabClick('my-listings')}
                 className={`w-1/3 py-4 px-1 text-center border-b-2 font-medium text-sm ${
                   activeTab === 'my-listings'
-                    ? 'border-blue-600 text-blue-600'
+                    ? 'border-green-600 text-green-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
               >
@@ -1653,7 +2254,7 @@ export default function OwnerDashboard() {
                 onClick={() => handleTabClick('reviews')}
                 className={`w-1/3 py-4 px-1 text-center border-b-2 font-medium text-sm ${
                   activeTab === 'reviews'
-                    ? 'border-blue-600 text-blue-600'
+                    ? 'border-green-600 text-green-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
               >
@@ -1663,7 +2264,7 @@ export default function OwnerDashboard() {
                 onClick={() => handleTabClick('new-listing')}
                 className={`w-1/3 py-4 px-1 text-center border-b-2 font-medium text-sm ${
                   activeTab === 'new-listing'
-                    ? 'border-blue-600 text-blue-600'
+                    ? 'border-green-600 text-green-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
               >

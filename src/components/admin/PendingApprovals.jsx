@@ -4,36 +4,39 @@ import LoadingSpinner from '../ui/LoadingSpinner';
 
 // Utility function to get image URL from storage path
 const getImageUrl = (path) => {
-  if (!path) {
-    return '/placeholder-apartment.jpg';
+  if (!path || path.trim() === '') {
+    return '/images/placeholder-apartment.svg';
   }
   
-  // If it's already a complete URL (for demo/sample data)
   if (path.startsWith('http://') || path.startsWith('https://')) {
     return path;
   } 
   
-  // For storage paths
   try {
-    // Handle different path formats
-    let normalizedPath = path;
+    let normalizedPath = path.trim();
     
-    if (path.includes('apartment_images/')) {
-      // If the path includes the bucket name already, extract just the path part
-      normalizedPath = path.split('apartment_images/')[1];
-    } else if (!path.includes('/')) {
-      // If it's just a filename, assume it's in the apartments folder
-      normalizedPath = `apartments/${path}`;
+    if (normalizedPath.includes('apartment_images/')) {
+      normalizedPath = normalizedPath.split('apartment_images/')[1];
+    } else if (!normalizedPath.includes('/')) {
+      normalizedPath = `apartments/${normalizedPath}`;
+    }
+    
+    if (!normalizedPath || normalizedPath === '') {
+      return '/images/placeholder-apartment.svg';
     }
     
     const { data } = supabase.storage
       .from('apartment_images')
       .getPublicUrl(normalizedPath);
     
-    return data.publicUrl;
+    if (data && data.publicUrl && data.publicUrl.trim() !== '') {
+      return data.publicUrl;
+    } else {
+      return '/images/placeholder-apartment.svg';
+    }
   } catch (error) {
     console.error('Error generating image URL:', error, path);
-    return '/placeholder-apartment.jpg';
+    return '/images/placeholder-apartment.svg';
   }
 };
 
@@ -231,7 +234,7 @@ const PendingApprovals = () => {
             } else if (firstImage?.storage_path) {
               imageUrl = getImageUrl(firstImage.storage_path);
             } else {
-              imageUrl = '/placeholder-apartment.jpg';
+              imageUrl = '/images/placeholder-apartment.svg';
             }
             
             return (
@@ -244,7 +247,7 @@ const PendingApprovals = () => {
                     loading="lazy"
                     onError={(e) => {
                       console.error("Image failed to load:", e.target.src);
-                      e.target.src = '/placeholder-apartment.jpg';
+                      e.target.src = '/images/placeholder-apartment.svg';
                     }}
                   />
                 </div>
@@ -336,7 +339,7 @@ const PendingApprovals = () => {
                           className="w-full h-full object-cover"
                           onError={(e) => {
                             console.error("Image failed to load:", e.target.src);
-                            e.target.src = '/placeholder-apartment.jpg';
+                            e.target.src = '/images/placeholder-apartment.svg';
                           }}
                         />
                       </div>

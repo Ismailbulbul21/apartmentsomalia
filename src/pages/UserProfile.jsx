@@ -791,11 +791,11 @@ export default function UserProfile() {
                                       ? supabase.storage
                                           .from('apartment_images')
                                           .getPublicUrl(item.apartments.apartment_images[0].storage_path).data.publicUrl
-                                      : '/placeholder-apartment.jpg'
+                                      : '/images/placeholder-apartment.svg'
                                   }
                                   alt={item.apartments.title}
                                   className="w-full h-full object-cover transition-transform hover:scale-110 duration-300"
-                                  onError={(e) => { e.target.src = '/placeholder-apartment.jpg'; }}
+                                  onError={(e) => { e.target.src = '/images/placeholder-apartment.svg'; }}
                                 />
                                 <div className="absolute top-2 right-2">
                                   <motion.button

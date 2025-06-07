@@ -117,6 +117,19 @@ const ApartmentCard = memo(({ apartment }) => {
     return null;
   }
   
+  // Check if any floors are available
+  const hasAvailableFloors = () => {
+    if (!apartment.apartment_floors || !Array.isArray(apartment.apartment_floors)) {
+      // If no floor data, fall back to apartment.is_available
+      return apartment.is_available;
+    }
+    
+    // Check if any floor has status 'available'
+    return apartment.apartment_floors.some(floor => floor.floor_status === 'available');
+  };
+  
+  const isApartmentAvailable = hasAvailableFloors();
+  
   // Check if apartment_images exists and is valid before trying to access it 
   let primaryImage = null;
   try {
@@ -234,44 +247,44 @@ const ApartmentCard = memo(({ apartment }) => {
         {/* Availability Status Badge */}
         <div className="mt-3">
           <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold shadow-sm ${
-            apartment.is_available 
+            isApartmentAvailable 
               ? 'bg-green-900 text-green-200 border border-green-700' 
-              : 'bg-orange-900 text-orange-200 border border-orange-700'
+              : 'bg-red-900 text-red-200 border border-red-700'
           }`}>
-            {apartment.is_available ? (
+            {isApartmentAvailable ? (
               <>
                 <svg className="w-3 h-3 mr-1.5" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                 </svg>
-                Available
+                Waa la heli karaa
               </>
             ) : (
               <>
                 <svg className="w-3 h-3 mr-1.5" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
                 </svg>
-                Not Available
+                Lama heli karo
               </>
             )}
           </span>
         </div>
         
         {/* Contact Section - Always show for all apartments */}
-        {apartment.owner && apartment.owner.whatsapp_number && (
+        {(apartment.whatsapp_number || (apartment.owner && apartment.owner.whatsapp_number)) && (
           <div className="mt-3 flex justify-end">
             <a 
-              href={`https://wa.me/${apartment.owner.whatsapp_number.replace(/\D/g, '')}?text=Halo, Waan ku xiiseynayaa gurigaaga: ${apartment.title}`}
+              href={`https://wa.me/${(apartment.whatsapp_number || apartment.owner.whatsapp_number).replace(/\D/g, '')}?text=Halo, Waan ku xiiseynayaa gurigaaga: ${apartment.title}`}
               target="_blank"
               rel="noopener noreferrer"
               className={`flex items-center transition-colors ${
-                apartment.is_available 
+                isApartmentAvailable 
                   ? 'text-green-400 hover:text-green-300' 
                   : 'text-green-500 hover:text-green-400'
               }`}
               onClick={(e) => {
                 e.stopPropagation();
                 e.preventDefault();
-                window.open(`https://wa.me/${apartment.owner.whatsapp_number.replace(/\D/g, '')}?text=Halo, Waan ku xiiseynayaa gurigaaga: ${apartment.title}`, '_blank');
+                window.open(`https://wa.me/${(apartment.whatsapp_number || apartment.owner.whatsapp_number).replace(/\D/g, '')}?text=Halo, Waan ku xiiseynayaa gurigaaga: ${apartment.title}`, '_blank');
               }}
             >
               <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
@@ -344,7 +357,8 @@ export default function Home() {
         .from('apartments')
         .select(`
           *,
-          apartment_images(storage_path, is_primary)
+          apartment_images(storage_path, is_primary),
+          apartment_floors(floor_status)
         `)
         .eq('status', 'approved');
         
@@ -552,400 +566,397 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen">
-      {/* Hero Section with Integrated Filter */}
-      <section className="relative text-white overflow-hidden">
-        {/* Background with gradient overlay */}
-        <div className="absolute inset-0 z-0">
-          <div className="absolute inset-0 bg-gradient-to-b from-night-950/90 to-night-900/90 z-10"></div>
-          <img 
-            src="/images/mogadishu-cityscape.jpg" 
-            alt="Muqdisho Muuqaal" 
-            className="w-full h-full object-cover"
-            onError={(e) => {
-              e.target.onerror = null;
-              e.target.src = "/images/futuristic-apartments-hero.jpg";
-            }}
-          />
-          
-          {/* Animated gradient effect */}
-          <div className="absolute inset-0 z-5 opacity-30">
-            <div className="absolute -inset-[10%] bg-gradient-conic from-purple-700 via-primary-800/0 to-teal-600/0 animate-slow-spin"></div>
-          </div>
-        </div>
-        
-        <div className="container relative z-20 mx-auto px-4 py-20 md:py-24">
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8 }}
-            className="max-w-4xl mx-auto text-center"
-          >
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6 text-transparent bg-clip-text bg-gradient-to-r from-white via-primary-300 to-white">
-              Ka Hel Gurigaaga Ku Haboon Muqdisho
-            </h1>
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+      {/* Compact Header with Districts and Filters */}
+      <section className="relative text-white">
+        <div className="container mx-auto px-4 py-4">
+          {/* Districts Section - Very Compact */}
+          <div className="mb-4">
+            {/* Small title above districts */}
+            <h2 className="text-lg font-semibold text-white mb-3 text-center">📍 Degmooyinka Muqdisho</h2>
             
-            {/* All-in-One Advanced Filter Panel */}
-            <motion.div 
-              className="bg-night-900/90 backdrop-blur-md p-6 md:p-8 rounded-2xl border border-primary-500/30 shadow-glow mb-8"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2, duration: 0.5 }}
-            >
-              {/* Search bar with integrated filters */}
-              <form onSubmit={handleFilterSubmit} className="space-y-6">
-                {/* District selection */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <h2 className="text-xl font-semibold text-primary-300">
-                      {selectedDistrict ? `Fiiri Degmada ${selectedDistrict}` : 'Xagee Baad Jeclaan Lahayd Inaad Ku Noolaato?'}
-                    </h2>
-                    {selectedDistrict && (
-                      <button 
-                        type="button"
-                        onClick={resetFilters}
-                        className="text-sm text-primary-400 hover:text-primary-300 flex items-center space-x-1"
-                      >
-                        <span>Tirtir Dhammaan Filtarrada</span>
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
-                    )}
-                  </div>
-                  
-                  {/* Mobile dropdown */}
-                  <div className="block md:hidden">
-                    <div className="relative">
-                      <select
-                        value={selectedDistrict}
-                        onChange={(e) => handleDistrictChange(e.target.value)}
-                        className="w-full bg-night-800 border border-night-600 text-white rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary-500 appearance-none"
-                      >
-                        <option value="">Dhammaan Degmooyinka</option>
-                        {districts.map(district => (
-                          <option key={district} value={district}>{district}</option>
-                        ))}
-                      </select>
-                      <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-primary-500">
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                      </div>
-                    </div>
-                    {selectedDistrict && (
-                      <div className="mt-3 flex justify-center">
-                        <button
-                          onClick={resetFilters}
-                          className="flex items-center space-x-1 text-xs text-primary-400 bg-night-700 px-2.5 py-1.5 rounded-full"
-                        >
-                          <span>Tirtir filtarka "{selectedDistrict}"</span>
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                  
-                  {/* District chips for desktop */}
-                  <div className="hidden md:grid grid-cols-8 gap-2 mb-4">
-                    <motion.div
-                      onClick={() => handleDistrictChange('')}
-                      className={`cursor-pointer rounded-lg p-3 text-center transition-all ${
-                        selectedDistrict === '' 
-                          ? 'bg-primary-600 text-white shadow-glow-sm' 
-                          : 'bg-night-800 hover:bg-night-700 text-gray-300 hover:text-white'
-                      }`}
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                    >
-                      <span className="text-sm font-medium">Dhamaan</span>
-                    </motion.div>
-                    
-                    {districts.slice(0, 7).map(district => (
-                      <motion.div
-                        key={district}
-                        onClick={() => handleDistrictChange(district)}
-                        className={`cursor-pointer rounded-lg p-3 text-center transition-all ${
-                          selectedDistrict === district 
-                            ? 'bg-primary-600 text-white shadow-glow-sm' 
-                            : 'bg-night-800 hover:bg-night-700 text-gray-300 hover:text-white'
-                        }`}
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        animate={selectedDistrict === district ? 
-                          { 
-                            y: [0, -5, 0],
-                            boxShadow: "0 10px 25px -5px rgba(59, 130, 246, 0.4)"
-                          } : 
-                          {}
-                        }
-                        transition={selectedDistrict === district ? 
-                          { duration: 0.5, ease: "easeOut" } : 
-                          { duration: 0.3 }
-                        }
-                      >
-                        <span className="text-sm font-medium">{district}</span>
-                      </motion.div>
-                    ))}
-                  </div>
-                  
-                  <div className="hidden md:grid grid-cols-8 gap-2">
-                    {districts.slice(7).map(district => (
-                      <motion.div
-                        key={district}
-                        onClick={() => handleDistrictChange(district)}
-                        className={`cursor-pointer rounded-lg p-3 text-center transition-all ${
-                          selectedDistrict === district 
-                            ? 'bg-primary-600 text-white shadow-glow-sm' 
-                            : 'bg-night-800 hover:bg-night-700 text-gray-300 hover:text-white'
-                        }`}
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        animate={selectedDistrict === district ? 
-                          { 
-                            y: [0, -5, 0],
-                            boxShadow: "0 10px 25px -5px rgba(59, 130, 246, 0.4)"
-                          } : 
-                          {}
-                        }
-                        transition={selectedDistrict === district ? 
-                          { duration: 0.5, ease: "easeOut" } : 
-                          { duration: 0.3 }
-                        }
-                      >
-                        <span className="text-sm font-medium">{district}</span>
-                      </motion.div>
-                    ))}
-                  </div>
+            {/* Mobile dropdown */}
+            <div className="block md:hidden mb-3">
+              <div className="relative">
+                <select
+                  value={selectedDistrict}
+                  onChange={(e) => handleDistrictChange(e.target.value)}
+                  className="w-full bg-gray-800 border border-gray-600 text-white rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none font-medium"
+                >
+                  <option value="">🏙️ Dhammaan Degmooyinka</option>
+                  {districts.map(district => (
+                    <option key={district} value={district}>📍 {district}</option>
+                  ))}
+                </select>
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-blue-400">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </div>
+              {selectedDistrict && (
+                <div className="mt-2 flex justify-center">
+                  <button
+                    onClick={resetFilters}
+                    className="flex items-center space-x-1 text-xs text-blue-400 bg-gray-800 px-3 py-1 rounded-full border border-gray-600 hover:bg-gray-700 transition-colors"
+                  >
+                    <span>Tirtir "{selectedDistrict}"</span>
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              )}
+            </div>
+            
+            {/* District chips for desktop - More compact */}
+            <div className="hidden md:block">
+              <div className="grid grid-cols-8 gap-2 mb-3">
+                <motion.div
+                  onClick={() => handleDistrictChange('')}
+                  className={`cursor-pointer rounded-lg p-2 text-center transition-all ${
+                    selectedDistrict === '' 
+                      ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' 
+                      : 'bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white border border-gray-700'
+                  }`}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <div className="text-lg mb-1">🏙️</div>
+                  <span className="text-xs font-medium">Dhamaan</span>
+                </motion.div>
+                
+                {districts.slice(0, 7).map(district => (
+                  <motion.div
+                    key={district}
+                    onClick={() => handleDistrictChange(district)}
+                    className={`cursor-pointer rounded-lg p-2 text-center transition-all ${
+                      selectedDistrict === district 
+                        ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' 
+                        : 'bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white border border-gray-700'
+                    }`}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                  >
+                    <div className="text-lg mb-1">📍</div>
+                    <span className="text-xs font-medium">{district}</span>
+                  </motion.div>
+                ))}
+              </div>
+              
+              <div className="grid grid-cols-8 gap-2">
+                {districts.slice(7).map(district => (
+                  <motion.div
+                    key={district}
+                    onClick={() => handleDistrictChange(district)}
+                    className={`cursor-pointer rounded-lg p-2 text-center transition-all ${
+                      selectedDistrict === district 
+                        ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' 
+                        : 'bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white border border-gray-700'
+                    }`}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                  >
+                    <div className="text-lg mb-1">📍</div>
+                    <span className="text-xs font-medium">{district}</span>
+                  </motion.div>
+                ))}
+                {/* Fill remaining slots with empty divs for proper grid alignment */}
+                {Array.from({ length: 8 - districts.slice(7).length }).map((_, index) => (
+                  <div key={`empty-${index}`}></div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Very Compact Filter Panel */}
+          <motion.div 
+            className="bg-gray-800/90 backdrop-blur-md p-3 rounded-xl border border-gray-700 shadow-xl"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+          >
+            <form onSubmit={handleFilterSubmit} className="space-y-3">
+              {/* Filter controls - Now as dropdowns */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1 font-medium">Qiimaha Ugu Yar</label>
+                  <select
+                    value={minPrice}
+                    onChange={(e) => setMinPrice(e.target.value)}
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-2 py-2 text-white text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors"
+                  >
+                    <option value="">Kuu wada</option>
+                    <option value="100">$100+</option>
+                    <option value="200">$200+</option>
+                    <option value="300">$300+</option>
+                    <option value="400">$400+</option>
+                    <option value="500">$500+</option>
+                    <option value="750">$750+</option>
+                    <option value="1000">$1000+</option>
+                  </select>
                 </div>
                 
-                {/* Advanced filters */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <div>
-                    <label className="block text-xs text-gray-400 mb-1">Qiimaha Ugu Yar ($)</label>
-                    <input
-                      type="number"
-                      value={minPrice}
-                      onChange={(e) => setMinPrice(e.target.value)}
-                      placeholder="Qiimaha ugu yar"
-                      className="w-full bg-night-800 border border-night-600 rounded-lg px-3 py-2 text-white text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500 focus:outline-none"
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-xs text-gray-400 mb-1">Qiimaha Ugu Badan ($)</label>
-                    <input
-                      type="number"
-                      value={maxPrice}
-                      onChange={(e) => setMaxPrice(e.target.value)}
-                      placeholder="Qiimaha ugu badan"
-                      className="w-full bg-night-800 border border-night-600 rounded-lg px-3 py-2 text-white text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500 focus:outline-none"
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-xs text-gray-400 mb-1">Qolalka Jiifka</label>
-                    <input
-                      type="number"
-                      value={minRooms}
-                      onChange={(e) => setMinRooms(e.target.value)}
-                      placeholder="Tirada ugu yar"
-                      className="w-full bg-night-800 border border-night-600 rounded-lg px-3 py-2 text-white text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500 focus:outline-none"
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-xs text-gray-400 mb-1">Alaab Guriga</label>
-                    <select
-                      value={isFurnished}
-                      onChange={(e) => setIsFurnished(e.target.value)}
-                      className="w-full bg-night-800 border border-night-600 rounded-lg px-3 py-2 text-white text-sm focus:border-primary-500 focus:ring-1 focus:ring-primary-500 focus:outline-none"
-                    >
-                      <option value="">Kuu Wada</option>
-                      <option value="true">Haa</option>
-                      <option value="false">Maya</option>
-                    </select>
-                  </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1 font-medium">Qiimaha Ugu Badan</label>
+                  <select
+                    value={maxPrice}
+                    onChange={(e) => setMaxPrice(e.target.value)}
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-2 py-2 text-white text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors"
+                  >
+                    <option value="">Kuu wada</option>
+                    <option value="300">$300</option>
+                    <option value="500">$500</option>
+                    <option value="750">$750</option>
+                    <option value="1000">$1000</option>
+                    <option value="1500">$1500</option>
+                    <option value="2000">$2000</option>
+                    <option value="3000">$3000+</option>
+                  </select>
                 </div>
                 
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1 font-medium">Qolalka Jiifka</label>
+                  <select
+                    value={minRooms}
+                    onChange={(e) => setMinRooms(e.target.value)}
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-2 py-2 text-white text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors"
+                  >
+                    <option value="">Kuu wada</option>
+                    <option value="1">1+ qol</option>
+                    <option value="2">2+ qol</option>
+                    <option value="3">3+ qol</option>
+                    <option value="4">4+ qol</option>
+                    <option value="5">5+ qol</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1 font-medium">Alaab Guriga</label>
+                  <select
+                    value={isFurnished}
+                    onChange={(e) => setIsFurnished(e.target.value)}
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-2 py-2 text-white text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors"
+                  >
+                    <option value="">Kuu Wada</option>
+                    <option value="true">Haa</option>
+                    <option value="false">Maya</option>
+                  </select>
+                </div>
+              </div>
+              
+              <div className="flex flex-col sm:flex-row gap-2">
                 <button
                   type="submit"
-                  className="bg-primary-600 hover:bg-primary-700 text-white font-medium px-6 py-3 rounded-lg w-full md:w-auto transition-colors flex items-center justify-center space-x-2"
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2 rounded-lg transition-colors flex items-center justify-center space-x-2 flex-1 text-sm"
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                   </svg>
-                  <span>Raadi Guryaha</span>
+                  <span>Raadi</span>
                 </button>
-              </form>
-            </motion.div>
+                
+                {(minPrice || maxPrice || minRooms || isFurnished || selectedDistrict) && (
+                  <button
+                    type="button"
+                    onClick={resetFilters}
+                    className="bg-gray-700 hover:bg-gray-600 text-white font-medium px-4 py-2 rounded-lg transition-colors flex items-center justify-center space-x-2 text-sm"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                    <span>Tirtir</span>
+                  </button>
+                )}
+              </div>
+            </form>
           </motion.div>
         </div>
       </section>
       
-      {/* Apartments Section */}
-      <section ref={apartmentsSectionRef} className="bg-gradient-to-b from-night-950 to-night-900 py-10 md:py-16">
+      {/* Apartments Section - Immediately Visible */}
+      <section ref={apartmentsSectionRef} className="py-4">
         <div className="container mx-auto px-4">
-          <div className="mb-8">
-            <div className="flex flex-wrap items-center justify-between">
-              <h2 className="text-3xl font-bold text-white mb-2">
-                {selectedDistrict ? `Guryaha ${selectedDistrict}` : 'Guryaha La Heli Karo'}
-              </h2>
+          <div className="mb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h1 className="text-xl md:text-2xl font-bold text-white mb-1">
+                  {selectedDistrict ? `🏠 Guryaha ${selectedDistrict}` : '🏠 Guryaha La Heli Karo'}
+                </h1>
+                <p className="text-gray-400 text-sm">
+                  {loading ? 'Waa la soo raraya...' : 
+                   apartments.length > 0 ? `${apartments.length} guri la helay` : 
+                   'Raadi gurigaaga ku haboon'}
+                </p>
+              </div>
               
               {selectedDistrict && (
                 <button 
                   onClick={resetFilters}
-                  className="flex items-center bg-primary-600 text-white px-3 py-1.5 rounded-lg text-sm hover:bg-primary-700 transition-colors"
+                  className="flex items-center bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 transition-colors text-sm"
                 >
                   <span>Tirtir filtarka</span>
-                  <svg className="w-4 h-4 ml-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-3 h-3 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
               )}
             </div>
-            
-            {selectedDistrict && (
-              <div className="mt-2 flex items-center text-primary-300">
-                <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-                <span className="text-sm">Itus natiijadaha la shaandheeyay</span>
-              </div>
-            )}
           </div>
           
           {loading ? (
-            <div className="flex justify-center py-12">
-              <LoadingSpinner size="lg" />
+            <div className="flex justify-center py-8">
+              <div className="text-center">
+                <LoadingSpinner size="lg" />
+                <p className="mt-3 text-gray-400 text-sm">Waa la soo raraya guryaha...</p>
+              </div>
             </div>
           ) : error ? (
-            <div className="bg-red-900/30 border border-red-800 text-red-200 p-4 rounded-lg">
-              {error}
+            <div className="bg-red-900/30 border border-red-700 text-red-200 p-4 rounded-xl text-center">
+              <div className="text-3xl mb-3">⚠️</div>
+              <h3 className="text-lg font-bold mb-2">Qalad ayaa dhacay</h3>
+              <p className="mb-3 text-sm">{error}</p>
+              <button
+                onClick={() => window.location.reload()}
+                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors text-sm"
+              >
+                Dib u Cusboonaysii
+              </button>
             </div>
           ) : apartments.length === 0 ? (
             <div className="text-center py-12">
-              <svg className="w-16 h-16 text-night-600 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-              </svg>
-              <h3 className="text-xl text-white mb-2">Guryo lama helin</h3>
-              <p className="text-night-300">Isku day inaad wax ka beddesho filtarada ama dib u fiiri mar dambe.</p>
+              <div className="text-5xl mb-4">🏠</div>
+              <h3 className="text-xl text-white mb-3">Guryo lama helin</h3>
+              <p className="text-gray-400 mb-4 max-w-md mx-auto text-sm">
+                {selectedDistrict 
+                  ? `Ma jiraan guryo la heli karo degmada ${selectedDistrict}. Isku day degmo kale ama wax ka beddel filtarada.`
+                  : 'Isku day inaad wax ka beddesho filtarada ama dib u fiiri mar dambe.'
+                }
+              </p>
               <button
                 onClick={resetFilters}
-                className="mt-4 bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg"
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors text-sm"
               >
                 Dib u Celi Filtarrada
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {Array.isArray(apartments) && apartments.length > 0 ? (
-                apartments.map((apartment) => (
-                  apartment ? <ApartmentCard key={apartment.id || Math.random()} apartment={apartment} /> : null
-                ))
-              ) : (
-                <div className="col-span-4 text-center py-12">
-                  <p className="text-night-300">Ma jiraan guryo la heli karo.</p>
-                  <button
-                    onClick={resetFilters}
-                    className="mt-4 bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg"
+            <motion.div 
+              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.5 }}
+            >
+              {apartments.map((apartment, index) => (
+                apartment ? (
+                  <motion.div
+                    key={apartment.id || Math.random()}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: index * 0.05 }}
                   >
-                    Dib u Celi Filtarrada
-                  </button>
-                </div>
-              )}
-            </div>
+                    <ApartmentCard apartment={apartment} />
+                  </motion.div>
+                ) : null
+              ))}
+            </motion.div>
           )}
         </div>
       </section>
       
-      {/* Features Section */}
-      <section className="bg-night-950 py-20">
+      {/* Quick Stats Section - More compact */}
+      {apartments.length > 0 && (
+        <section className="py-8 bg-gray-800/50">
+          <div className="container mx-auto px-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+              <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                <div className="text-2xl font-bold text-blue-400 mb-1">{apartments.length}</div>
+                <div className="text-gray-300 text-xs">Guryo La Helay</div>
+              </div>
+              <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                <div className="text-2xl font-bold text-green-400 mb-1">
+                  {apartments.filter(apt => apt.apartment_floors?.some(floor => floor.floor_status === 'available') || apt.is_available).length}
+                </div>
+                <div className="text-gray-300 text-xs">La Heli Karaa</div>
+              </div>
+              <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                <div className="text-2xl font-bold text-purple-400 mb-1">
+                  {selectedDistrict ? '1' : districts.length}
+                </div>
+                <div className="text-gray-300 text-xs">
+                  {selectedDistrict ? 'Degmo' : 'Degmooyinka'}
+                </div>
+              </div>
+              <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                <div className="text-2xl font-bold text-yellow-400 mb-1">
+                  ${apartments.length > 0 ? Math.min(...apartments.map(apt => apt.price_per_month)) : 0}+
+                </div>
+                <div className="text-gray-300 text-xs">Qiimaha Ugu Yar</div>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+      
+      {/* Features Section - More compact */}
+      <section className="py-12 bg-gray-900/50">
         <div className="container mx-auto px-4">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl font-bold text-white mb-4">Nolol Cusub oo La Qaabeeyay</h2>
-            <p className="text-night-300 max-w-2xl mx-auto">
-              Guryaheena casriga ah waxaa loogu talagalay hab-nololeedkaaga, iyagoo bixiya adeegyo heer sare ah iyo faahfaahino si taxadar leh loo sameeyey.
+          <div className="text-center mb-8">
+            <h2 className="text-xl md:text-2xl font-bold text-white mb-3">Maxay Ka Gaar Yihiin Guryaheena?</h2>
+            <p className="text-gray-400 max-w-2xl mx-auto text-sm">
+              Guryaha casriga ah ee Muqdisho oo leh adeegyo heer sare ah
             </p>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <motion.div 
-              className="p-6 bg-night-900 rounded-xl border border-night-800 text-center"
-              whileHover={{ y: -10 }}
+              className="p-4 bg-gray-800 rounded-lg border border-gray-700 text-center hover:bg-gray-750 transition-colors"
+              whileHover={{ y: -3 }}
               transition={{ duration: 0.3 }}
             >
-              <div className="w-16 h-16 mx-auto mb-4 bg-primary-900/30 text-primary-400 rounded-full flex items-center justify-center">
-                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="w-12 h-12 mx-auto mb-3 bg-blue-600/20 text-blue-400 rounded-full flex items-center justify-center">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
               </div>
-              <h3 className="text-xl font-bold text-white mb-2">Tignoolajiyada Guryaha Casriga ah</h3>
-              <p className="text-night-300">
-                Ka xakamee iftiinka, cimilada, iyo amniga telefoonkaaga casriga ah adigoo isticmaalaya astaamaha guryaha casriga ah ee la isku dhafay.
+              <h3 className="text-lg font-bold text-white mb-2">Tignoolajiyad Casri ah</h3>
+              <p className="text-gray-400 text-sm">
+                Guryaha casriga ah oo leh adeegyo tignoolajiyad ah oo heer sare ah
               </p>
             </motion.div>
             
             <motion.div 
-              className="p-6 bg-night-900 rounded-xl border border-night-800 text-center"
-              whileHover={{ y: -10 }}
+              className="p-4 bg-gray-800 rounded-lg border border-gray-700 text-center hover:bg-gray-750 transition-colors"
+              whileHover={{ y: -3 }}
               transition={{ duration: 0.3 }}
             >
-              <div className="w-16 h-16 mx-auto mb-4 bg-primary-900/30 text-primary-400 rounded-full flex items-center justify-center">
-                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+              <div className="w-12 h-12 mx-auto mb-3 bg-green-600/20 text-green-400 rounded-full flex items-center justify-center">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
               </div>
-              <h3 className="text-xl font-bold text-white mb-2">Goobaha Ugu Fiican</h3>
-              <p className="text-night-300">
-                Ku yaalla xaafadaha ugu roonaan iyadoo si fudud looga heli karo gaadiidka iyo adeegyada.
+              <h3 className="text-lg font-bold text-white mb-2">Goobaha Ugu Fiican</h3>
+              <p className="text-gray-400 text-sm">
+                Ku yaalla xaafadaha ugu roonaan ee Muqdisho
               </p>
             </motion.div>
             
             <motion.div 
-              className="p-6 bg-night-900 rounded-xl border border-night-800 text-center"
-              whileHover={{ y: -10 }}
+              className="p-4 bg-gray-800 rounded-lg border border-gray-700 text-center hover:bg-gray-750 transition-colors"
+              whileHover={{ y: -3 }}
               transition={{ duration: 0.3 }}
             >
-              <div className="w-16 h-16 mx-auto mb-4 bg-primary-900/30 text-primary-400 rounded-full flex items-center justify-center">
-                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="w-12 h-12 mx-auto mb-3 bg-purple-600/20 text-purple-400 rounded-full flex items-center justify-center">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
                 </svg>
               </div>
-              <h3 className="text-xl font-bold text-white mb-2">Naqshadeyn Casri ah</h3>
-              <p className="text-night-300">
-                Dhismayaal casri ah, qolal ballaaran oo furan, iyo meelo nololeed si taxadar leh loo naqshadeeyay.
+              <h3 className="text-lg font-bold text-white mb-2">Naqshadeyn Qurux badan</h3>
+              <p className="text-gray-400 text-sm">
+                Dhismayaal casri ah oo si taxadar leh loo naqshadeeyay
               </p>
             </motion.div>
-          </div>
-        </div>
-      </section>
-      
-      {/* CTA Section */}
-      <section className="relative bg-night-900 py-20">
-        <div className="container mx-auto px-4">
-          <div className="max-w-3xl mx-auto text-center">
-            <h2 className="text-3xl font-bold text-white mb-6">Ma diyaar u tahay inaad hesho gurigaaga ku haboon?</h2>
-            <p className="text-night-300 text-lg mb-8">
-              Ku biir kumanaan qof oo ku qanacsan oo helay guryahooda ku haboon annaga.
-            </p>
-            <div className="flex flex-col sm:flex-row justify-center gap-4">
-              <Link 
-                to="/signup" 
-                className="bg-primary-500 hover:bg-primary-600 text-white text-lg px-8 py-3 rounded-lg shadow-lg transition-all duration-300 inline-block"
-              >
-                Ku Bilow Maanta
-              </Link>
-              <Link 
-                to="/contact" 
-                className="bg-night-800 hover:bg-night-700 text-white text-lg px-8 py-3 rounded-lg shadow-lg transition-all duration-300 border border-night-600"
-              >
-                Nala Soo Xiriir
-              </Link>
-            </div>
           </div>
         </div>
       </section>
