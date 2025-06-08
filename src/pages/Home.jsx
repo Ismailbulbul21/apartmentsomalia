@@ -684,9 +684,9 @@ export default function Home() {
                   <select
                     value={minPrice}
                     onChange={(e) => setMinPrice(e.target.value)}
-                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-2 py-2 text-white text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors"
+                    className="w-full bg-gray-800 border border-gray-600 text-white rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none font-medium"
                   >
-                    <option value="">Kuu wada</option>
+                    <option value="">Dhamaan</option>
                     <option value="100">$100+</option>
                     <option value="200">$200+</option>
                     <option value="300">$300+</option>
@@ -702,9 +702,9 @@ export default function Home() {
                   <select
                     value={maxPrice}
                     onChange={(e) => setMaxPrice(e.target.value)}
-                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-2 py-2 text-white text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors"
+                    className="w-full bg-gray-800 border border-gray-600 text-white rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none font-medium"
                   >
-                    <option value="">Kuu wada</option>
+                    <option value="">Dhamaan</option>
                     <option value="300">$300</option>
                     <option value="500">$500</option>
                     <option value="750">$750</option>
@@ -720,9 +720,9 @@ export default function Home() {
                   <select
                     value={minRooms}
                     onChange={(e) => setMinRooms(e.target.value)}
-                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-2 py-2 text-white text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors"
+                    className="w-full bg-gray-800 border border-gray-600 text-white rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none font-medium"
                   >
-                    <option value="">Kuu wada</option>
+                    <option value="">Dhamaan</option>
                     <option value="1">1+ qol</option>
                     <option value="2">2+ qol</option>
                     <option value="3">3+ qol</option>
@@ -736,9 +736,9 @@ export default function Home() {
                   <select
                     value={isFurnished}
                     onChange={(e) => setIsFurnished(e.target.value)}
-                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-2 py-2 text-white text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors"
+                    className="w-full bg-gray-800 border border-gray-600 text-white rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none font-medium"
                   >
-                    <option value="">Kuu Wada</option>
+                    <option value="">Dhamaan</option>
                     <option value="true">Haa</option>
                     <option value="false">Maya</option>
                   </select>
