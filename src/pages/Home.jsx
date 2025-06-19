@@ -309,11 +309,10 @@ export default function Home() {
             created_at,
             primary_image_path,
             owner_id,
-            apartment_images!inner(storage_path, is_primary),
+            apartment_images(storage_path, is_primary),
             apartment_floors(floor_status)
           `)
-          .eq('status', 'approved')
-          .eq('is_available', true);
+          .eq('status', 'approved');
         
         // Apply filters efficiently using indexes
         if (selectedDistrict) {

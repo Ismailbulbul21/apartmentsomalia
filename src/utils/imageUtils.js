@@ -28,13 +28,17 @@ export const getImageUrl = (path) => {
   }
   
   try {
-    // Handle different path formats
+    // Handle different path formats - paths already include the folder structure
     let normalizedPath = path.trim();
     
-    if (normalizedPath.includes('apartment_images/')) {
-      normalizedPath = normalizedPath.split('apartment_images/')[1];
-    } else if (!normalizedPath.includes('/')) {
-      normalizedPath = `apartments/${normalizedPath}`;
+    // Remove any leading slashes
+    if (normalizedPath.startsWith('/')) {
+      normalizedPath = normalizedPath.substring(1);
+    }
+    
+    // Remove bucket name if it's included
+    if (normalizedPath.startsWith('apartment_images/')) {
+      normalizedPath = normalizedPath.substring('apartment_images/'.length);
     }
     
     // Safety check for empty normalized path after processing
@@ -48,6 +52,7 @@ export const getImageUrl = (path) => {
     
     // Safety check for empty publicUrl
     if (!data || !data.publicUrl) {
+      console.warn('Failed to generate public URL for path:', normalizedPath);
       return '/images/placeholder-apartment.svg';
     }
     
@@ -59,24 +64,30 @@ export const getImageUrl = (path) => {
     
     return data.publicUrl;
   } catch (error) {
-    console.error('Error generating image URL:', error, path);
+    console.error('Error generating image URL:', error, 'for path:', path);
     return '/images/placeholder-apartment.svg';
   }
 };
 
 /**
- * Preload images for better performance
- * @param {Array} imagePaths - Array of image paths to preload
+ * Preload images for better UX
+ * @param {string[]} imagePaths - Array of image paths to preload
  */
 export const preloadImages = (imagePaths) => {
-  if (!Array.isArray(imagePaths)) return;
+  if (!Array.isArray(imagePaths) || imagePaths.length === 0) {
+    return Promise.resolve();
+  }
   
-  imagePaths.forEach(path => {
-    if (path && path.trim() !== '') {
+  const promises = imagePaths.map(path => {
+    return new Promise((resolve) => {
       const img = new Image();
+      img.onload = () => resolve();
+      img.onerror = () => resolve(); // Still resolve on error to not block other images
       img.src = getImageUrl(path);
-    }
+    });
   });
+  
+  return Promise.all(promises);
 };
 
 /**
