@@ -945,45 +945,45 @@ const NewListing = () => {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.3 }}
-      className="max-w-4xl mx-auto"
+      className="max-w-4xl mx-auto px-2 sm:px-4"
     >
       <div className="bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 rounded-2xl shadow-2xl border border-gray-700 overflow-hidden">
-        <div className="bg-gradient-to-r from-gray-800 via-gray-700 to-gray-800 px-6 py-6">
-          <h2 className="text-3xl font-bold text-white mb-2">✨ Samee Liis Cusub</h2>
-          <p className="text-gray-300 text-lg">Buuxi macluumaadka gurigaaga si aad u sameyso liis cusub</p>
+        <div className="bg-gradient-to-r from-gray-800 via-gray-700 to-gray-800 px-4 sm:px-6 py-4 sm:py-6">
+          <h2 className="text-2xl sm:text-3xl font-bold text-white mb-2">✨ Samee Liis Cusub</h2>
+          <p className="text-gray-300 text-base sm:text-lg">Buuxi macluumaadka gurigaaga si aad u sameyso liis cusub</p>
         </div>
         
-        <form onSubmit={handleSubmit} className="p-8 space-y-8 bg-white">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 lg:p-8 space-y-6 sm:space-y-8 bg-white">
           {/* Basic Information */}
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-6">
             <h3 className="text-lg font-semibold text-gray-800 border-b border-gray-200 pb-2">
               Macluumaadka Aasaasiga ah
             </h3>
             
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Magaca Guriga *
-                    </label>
-                    <input
-                      type="text"
+                </label>
+                <input
+                  type="text"
                   value={formData.title}
                   onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-3 text-base border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Tusaale: Guri Qurux badan oo Hodan ku yaal"
-                      required
-                    />
-                  </div>
-                  
-                  <div>
+                  required
+                />
+              </div>
+              
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Degmada *
-                    </label>
+                </label>
                 <select
                   value={formData.district}
                   onChange={(e) => setFormData(prev => ({ ...prev, district: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      required
+                  className="w-full px-3 py-3 text-base border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
                 >
                   <option value="">Dooro degmada</option>
                   {districts.map(district => (
@@ -991,38 +991,39 @@ const NewListing = () => {
                   ))}
                 </select>
               </div>
-                  </div>
+              
+              <div className="lg:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Meesha Guriga ku yaal *
+                </label>
+                <input
+                  type="text"
+                  value={formData.location_description}
+                  onChange={(e) => setFormData(prev => ({ ...prev, location_description: e.target.value }))}
+                  className="w-full px-3 py-3 text-base border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Tusaale: Wadada Makka Al-Mukarrama, agagaarka suuqa weyn"
+                  required
+                />
+              </div>
+              
+              <div className="lg:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Faahfaahin Guriga
+                </label>
+                <textarea
+                  value={formData.description}
+                  onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                  rows={4}
+                  className="w-full px-3 py-3 text-base border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Qor faahfaahin dheeraad ah oo ku saabsan guriga..."
+                />
+              </div>
+            </div>
                   
-                  <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Meesha Guriga ku yaal *
-                    </label>
-                    <input
-                type="text"
-                value={formData.location_description}
-                onChange={(e) => setFormData(prev => ({ ...prev, location_description: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Tusaale: Wadada Makka Al-Mukarrama, agagaarka suuqa weyn"
-                      required
-                    />
-                  </div>
-                  
-                  <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Faahfaahin Guriga
-                    </label>
-              <textarea
-                value={formData.description}
-                onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                rows={4}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Qor faahfaahin dheeraad ah oo ku saabsan guriga..."
-                    />
-                  </div>
-                  
+            
             <div className="flex items-center">
-                      <input
-                        type="checkbox"
+              <input
+                type="checkbox"
                 id="is_furnished"
                 checked={formData.is_furnished}
                 onChange={(e) => setFormData(prev => ({ ...prev, is_furnished: e.target.checked }))}
@@ -1030,12 +1031,12 @@ const NewListing = () => {
               />
               <label htmlFor="is_furnished" className="ml-2 block text-sm text-gray-700">
                 Gurigu wuxuu leeyahay alaab (furnished)
-                    </label>
-              </div>
+              </label>
             </div>
+          </div>
             
           {/* Images Section */}
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-6">
             <h3 className="text-lg font-semibold text-gray-800 border-b border-gray-200 pb-2">
               Sawirrada Guriga
             </h3>
@@ -1049,7 +1050,7 @@ const NewListing = () => {
                         multiple
                         accept="image/*"
                         onChange={handleImageChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-3 text-base border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
               <p className="text-xs text-gray-500 mt-1">
                 Sawirka ugu horreeya ayaa noqon doona sawirka ugu muhiimsan
@@ -1057,13 +1058,13 @@ const NewListing = () => {
                 </div>
                 
             {imagePreviews.length > 0 && (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
                 {imagePreviews.map((preview, index) => (
                   <div key={index} className="relative">
                     <img
                       src={preview}
                             alt={`Preview ${index + 1}`}
-                      className={`w-full h-24 object-cover rounded-md border-2 ${
+                      className={`w-full h-20 sm:h-24 object-cover rounded-md border-2 ${
                         index === primaryImageIndex ? 'border-blue-500' : 'border-gray-200'
                       }`}
                     />
@@ -1075,14 +1076,14 @@ const NewListing = () => {
                               <button
                                 type="button"
                       onClick={() => removeImage(index)}
-                      className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600"
+                      className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm hover:bg-red-600 touch-manipulation"
                     >
                       ×
                               </button>
               <button
                       type="button"
                       onClick={() => setPrimaryImageIndex(index)}
-                      className="absolute bottom-1 left-1 bg-gray-800 bg-opacity-75 text-white text-xs px-1 rounded hover:bg-opacity-100"
+                      className="absolute bottom-1 left-1 bg-gray-800 bg-opacity-75 text-white text-xs px-1 py-0.5 rounded hover:bg-opacity-100 touch-manipulation"
                     >
                       Ka dhig ugu muhiimsan
               </button>
@@ -1093,19 +1094,19 @@ const NewListing = () => {
     </div>
 
           {/* Floors Section */}
-          <div className="space-y-6 border-4 border-blue-500 bg-blue-50 p-6 rounded-lg">
-            <div className="flex items-center justify-between border-b border-gray-200 pb-2">
-              <h3 className="text-xl font-bold text-blue-800">
+          <div className="space-y-4 sm:space-y-6 border-4 border-blue-500 bg-blue-50 p-4 sm:p-6 rounded-lg">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-gray-200 pb-2 space-y-2 sm:space-y-0">
+              <h3 className="text-lg sm:text-xl font-bold text-blue-800">
                 🏢 Dabaqyada Guriga (FLOOR SYSTEM)
               </h3>
-              <div className="flex items-center space-x-2">
-                <label className="text-lg font-bold text-blue-800">
+              <div className="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-2">
+                <label className="text-sm sm:text-base font-bold text-blue-800">
                   Tirada dabaqyada: {formData.total_floors}
                 </label>
                 <select
                   value={formData.total_floors}
                   onChange={(e) => handleTotalFloorsChange(e.target.value)}
-                  className="px-3 py-2 border-2 border-blue-300 rounded-lg text-lg font-semibold bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="px-3 py-2 border-2 border-blue-300 rounded-lg text-base sm:text-lg font-semibold bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-w-0"
                 >
                   {[1,2,3,4,5,6,7,8,9,10].map(num => (
                     <option key={num} value={num}>{num} dabaq</option>
@@ -1288,17 +1289,17 @@ const NewListing = () => {
           </div>
           
           {/* Submit Button */}
-          <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
+          <div className="flex flex-col sm:flex-row justify-end space-y-3 sm:space-y-0 sm:space-x-4 pt-6 border-t border-gray-200">
             <Link
               to="/owner/dashboard"
-              className="px-6 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
+              className="w-full sm:w-auto px-6 py-3 border border-gray-300 rounded-md text-gray-700 text-center hover:bg-gray-50 transition-colors"
             >
               Jooji
             </Link>
             <motion.button
               type="submit"
               disabled={loading}
-              className={`px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex items-center space-x-2 ${
+              className={`w-full sm:w-auto px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2 ${
                 loading ? 'opacity-50 cursor-not-allowed' : ''
               }`}
               whileHover={{ scale: loading ? 1 : 1.05 }}
@@ -2242,17 +2243,18 @@ export default function OwnerDashboard() {
             <nav className="-mb-px flex" aria-label="Tabs">
               <button
                 onClick={() => handleTabClick('my-listings')}
-                className={`w-1/3 py-4 px-1 text-center border-b-2 font-medium text-sm ${
+                className={`w-1/3 py-3 sm:py-4 px-1 text-center border-b-2 font-medium text-xs sm:text-sm ${
                   activeTab === 'my-listings'
                     ? 'border-green-600 text-green-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
               >
-                My Listings
+                <span className="hidden sm:inline">My Listings</span>
+                <span className="sm:hidden">Listings</span>
               </button>
               <button
                 onClick={() => handleTabClick('reviews')}
-                className={`w-1/3 py-4 px-1 text-center border-b-2 font-medium text-sm ${
+                className={`w-1/3 py-3 sm:py-4 px-1 text-center border-b-2 font-medium text-xs sm:text-sm ${
                   activeTab === 'reviews'
                     ? 'border-green-600 text-green-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -2262,17 +2264,18 @@ export default function OwnerDashboard() {
               </button>
               <button
                 onClick={() => handleTabClick('new-listing')}
-                className={`w-1/3 py-4 px-1 text-center border-b-2 font-medium text-sm ${
+                className={`w-1/3 py-3 sm:py-4 px-1 text-center border-b-2 font-medium text-xs sm:text-sm ${
                   activeTab === 'new-listing'
                     ? 'border-green-600 text-green-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
               >
-                Create Listing
+                <span className="hidden sm:inline">Create Listing</span>
+                <span className="sm:hidden">Create</span>
               </button>
             </nav>
           </div>
-          <div className="p-6">
+          <div className="p-3 sm:p-6">
             <Routes>
               <Route index element={<MyListings />} />
               <Route path="reviews" element={<Reviews />} />
