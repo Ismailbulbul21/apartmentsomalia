@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../lib/supabase';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { Link } from 'react-router-dom';
-import { getImageUrl, preloadImages } from '../utils/imageUtils';
+import { getImageUrl, preloadImages, testImageUrls } from '../utils/imageUtils';
 import { measureAsync } from '../utils/performance';
 
 // Lazy-loaded image component with placeholder
@@ -19,8 +19,19 @@ const LazyImage = memo(({ src, alt, className }) => {
     } else {
       const processedSrc = getImageUrl(src);
       setImageSrc(processedSrc);
+      console.log('🖼️ LazyImage processing:', src, '→', processedSrc);
     }
   }, [src]);
+  
+  const handleLoad = () => {
+    console.log('✅ Image loaded successfully:', imageSrc);
+    setIsLoaded(true);
+  };
+  
+  const handleError = (e) => {
+    console.error('❌ Image failed to load:', imageSrc);
+    setError(true);
+  };
   
   // Return early with placeholder if no valid source
   if (!imageSrc) {
@@ -57,8 +68,8 @@ const LazyImage = memo(({ src, alt, className }) => {
         src={imageSrc}
         alt={alt || "Apartment image"}
         className={`w-full h-full object-cover transition-all duration-500 ${isLoaded ? 'opacity-100' : 'opacity-0'}`}
-        onLoad={() => setIsLoaded(true)}
-        onError={() => setError(true)}
+        onLoad={handleLoad}
+        onError={handleError}
         loading="lazy"
       />
     </div>
@@ -85,41 +96,21 @@ const ApartmentCard = memo(({ apartment }) => {
   
   const isApartmentAvailable = hasAvailableFloors();
   
-  // Check if apartment_images exists and is valid before trying to access it 
-  let primaryImage = null;
-  try {
-    primaryImage = apartment.apartment_images && 
-                 Array.isArray(apartment.apartment_images) && 
-                 apartment.apartment_images.find(img => img && img.is_primary && img.storage_path && img.storage_path.trim() !== '');
-  } catch (err) {
-    console.error('Error finding primary image:', err);
+  // Get the image to display - simplified logic
+  let imageToShow = null;
+  
+  if (apartment.apartment_images && Array.isArray(apartment.apartment_images) && apartment.apartment_images.length > 0) {
+    // First try to find primary image
+    const primaryImage = apartment.apartment_images.find(img => img && img.is_primary && img.storage_path);
+    // Otherwise use first image
+    const firstImage = apartment.apartment_images.find(img => img && img.storage_path);
+    
+    imageToShow = primaryImage || firstImage;
+    
+    console.log(`🏠 ${apartment.title} - Selected image:`, imageToShow?.storage_path, '(primary:', !!primaryImage, ')');
   }
   
-  // Safer image selection with fallbacks
-  let imageToShow = { storage_path: '/images/placeholder-apartment.svg' };
-  try {
-    if (primaryImage && primaryImage.storage_path && primaryImage.storage_path.trim() !== '') {
-      imageToShow = primaryImage;
-    } else if (apartment.apartment_images && 
-              Array.isArray(apartment.apartment_images) && 
-              apartment.apartment_images.length > 0) {
-      // Look for the first valid image with a non-empty storage_path
-      const validImage = apartment.apartment_images.find(img => 
-        img && img.storage_path && img.storage_path.trim() !== ''
-      );
-      
-      if (validImage) {
-        imageToShow = validImage;
-      }
-    }
-  } catch (err) {
-    console.error('Error determining image to show:', err);
-  }
-  
-  // Final validation of image path - make sure it's not empty
-  if (!imageToShow.storage_path || imageToShow.storage_path.trim() === '') {
-    imageToShow.storage_path = '/images/placeholder-apartment.svg';
-  }
+  const imagePath = imageToShow?.storage_path || '/images/placeholder-apartment.svg';
   
   return (
     <motion.div 
@@ -132,7 +123,7 @@ const ApartmentCard = memo(({ apartment }) => {
       <div className="relative">
         <Link to={`/apartments/${apartment.id}`} className="block">
           <LazyImage 
-            src={imageToShow.storage_path} 
+            src={imagePath} 
             alt={apartment.title}
             className="h-48 w-full"
           />
@@ -258,6 +249,8 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   
+
+  
   // Filter states
   const [minPrice, setMinPrice] = useState('');
   const [maxPrice, setMaxPrice] = useState('');
@@ -343,6 +336,8 @@ export default function Home() {
         if (apartmentError) throw apartmentError;
         
         if (apartmentData && apartmentData.length > 0) {
+          console.log('🏠 Fetched', apartmentData.length, 'apartments with images');
+          
           // Get unique owner IDs and fetch profiles in one query
           const ownerIds = [...new Set(apartmentData.map(apt => apt.owner_id))];
           
@@ -371,7 +366,10 @@ export default function Home() {
             .map(img => img.storage_path)
             .filter(Boolean);
           
-          measureAsync('image-preload', () => preloadImages(imagePaths));
+          if (imagePaths.length > 0) {
+            console.log('🖼️ Preloading', imagePaths.length, 'images');
+            measureAsync('image-preload', () => preloadImages(imagePaths));
+          }
           
           setApartments(enrichedData);
         } else {

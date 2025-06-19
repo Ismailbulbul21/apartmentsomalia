@@ -28,7 +28,7 @@ export const getImageUrl = (path) => {
   }
   
   try {
-    // Handle different path formats - paths already include the folder structure
+    // Handle different path formats
     let normalizedPath = path.trim();
     
     // Remove any leading slashes
@@ -36,10 +36,8 @@ export const getImageUrl = (path) => {
       normalizedPath = normalizedPath.substring(1);
     }
     
-    // Remove bucket name if it's included
-    if (normalizedPath.startsWith('apartment_images/')) {
-      normalizedPath = normalizedPath.substring('apartment_images/'.length);
-    }
+    // The paths in database are like "apartments/filename.jpeg"
+    // These should be used as-is in the apartment_images bucket
     
     // Safety check for empty normalized path after processing
     if (!normalizedPath || normalizedPath === '') {
@@ -52,7 +50,7 @@ export const getImageUrl = (path) => {
     
     // Safety check for empty publicUrl
     if (!data || !data.publicUrl) {
-      console.warn('Failed to generate public URL for path:', normalizedPath);
+      console.warn('🖼️ Failed to generate public URL for path:', normalizedPath);
       return '/images/placeholder-apartment.svg';
     }
     
@@ -62,9 +60,10 @@ export const getImageUrl = (path) => {
       timestamp: Date.now()
     });
     
+    console.log('🖼️ Generated URL:', normalizedPath, '→', data.publicUrl);
     return data.publicUrl;
   } catch (error) {
-    console.error('Error generating image URL:', error, 'for path:', path);
+    console.error('🖼️ Error generating image URL:', error, 'for path:', path);
     return '/images/placeholder-apartment.svg';
   }
 };
@@ -75,19 +74,30 @@ export const getImageUrl = (path) => {
  */
 export const preloadImages = (imagePaths) => {
   if (!Array.isArray(imagePaths) || imagePaths.length === 0) {
+    console.log('🖼️ preloadImages: No images to preload');
     return Promise.resolve();
   }
+  
+  console.log('🖼️ preloadImages: Starting to preload', imagePaths.length, 'images');
   
   const promises = imagePaths.map(path => {
     return new Promise((resolve) => {
       const img = new Image();
-      img.onload = () => resolve();
-      img.onerror = () => resolve(); // Still resolve on error to not block other images
+      img.onload = () => {
+        console.log('🖼️ preloadImages: Successfully preloaded:', path);
+        resolve();
+      };
+      img.onerror = () => {
+        console.warn('🖼️ preloadImages: Failed to preload:', path);
+        resolve(); // Still resolve on error to not block other images
+      };
       img.src = getImageUrl(path);
     });
   });
   
-  return Promise.all(promises);
+  return Promise.all(promises).then(() => {
+    console.log('🖼️ preloadImages: Completed preloading all images');
+  });
 };
 
 /**
@@ -102,4 +112,61 @@ export const clearImageCache = () => {
  */
 export const getImageCacheSize = () => {
   return imageUrlCache.size;
+};
+
+/**
+ * Test function to verify image URL generation
+ */
+export const testImageUrls = () => {
+  const testPaths = [
+    'apartments/1010ed08-f109-4050-ab26-e5a31a9050d8-1748111578431-704.jpeg',
+    'apartments/5c627b60-0358-4ae4-a991-e04ae7156848-1748105138733-363.jpeg'
+  ];
+  
+  console.log('🧪 Testing image URL generation...');
+  testPaths.forEach(path => {
+    const url = getImageUrl(path);
+    console.log(`🧪 Path: ${path} → URL: ${url}`);
+  });
+};
+
+/**
+ * Test direct access to Supabase storage
+ */
+export const testDirectAccess = async () => {
+  const testPath = 'apartments/1010ed08-f109-4050-ab26-e5a31a9050d8-1748111578431-704.jpeg';
+  
+  console.log('🧪 Testing direct Supabase storage access...');
+  
+  try {
+    // Test getPublicUrl
+    const { data: urlData } = supabase.storage
+      .from('apartment_images')
+      .getPublicUrl(testPath);
+    
+    console.log('🧪 Generated public URL:', urlData.publicUrl);
+    
+    // Test if file exists
+    const { data: fileData, error: fileError } = await supabase.storage
+      .from('apartment_images')
+      .download(testPath);
+    
+    if (fileError) {
+      console.error('🧪 File download error:', fileError);
+    } else {
+      console.log('🧪 File exists and is accessible. Size:', fileData.size, 'bytes');
+    }
+    
+    // Test with fetch
+    try {
+      const response = await fetch(urlData.publicUrl);
+      console.log('🧪 Fetch response status:', response.status);
+      console.log('🧪 Fetch response headers:', Object.fromEntries(response.headers.entries()));
+    } catch (fetchError) {
+      console.error('🧪 Fetch error:', fetchError);
+    }
+    
+  } catch (error) {
+    console.error('🧪 Direct access test error:', error);
+  }
 }; 
