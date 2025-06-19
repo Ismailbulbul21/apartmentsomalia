@@ -3,53 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../lib/supabase';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { Link } from 'react-router-dom';
-
-// Utility function to get image URL from storage path
-const getImageUrl = (path) => {
-  // Handle undefined, null, or empty strings
-  if (!path || path.trim() === '') {
-    console.log('Missing or empty path provided to getImageUrl, using placeholder');
-    return '/images/placeholder-apartment.svg';
-  }
-  
-  // If it's already a complete URL (for demo/sample data)
-  if (path.startsWith('http://') || path.startsWith('https://')) {
-    return path;
-  } 
-  
-  // For storage paths
-  try {
-    // Handle different path formats
-    let normalizedPath = path.trim();
-    
-    if (normalizedPath.includes('apartment_images/')) {
-      normalizedPath = normalizedPath.split('apartment_images/')[1];
-    } else if (!normalizedPath.includes('/')) {
-      normalizedPath = `apartments/${normalizedPath}`;
-    }
-    
-    // Safety check for empty normalized path after processing
-    if (!normalizedPath || normalizedPath === '') {
-      console.warn('Normalized path is empty, using placeholder');
-      return '/images/placeholder-apartment.svg';
-    }
-    
-    const { data } = supabase.storage
-      .from('apartment_images')
-      .getPublicUrl(normalizedPath);
-    
-    // Safety check for empty publicUrl
-    if (!data || !data.publicUrl) {
-      console.warn('Empty publicUrl returned from Supabase, using placeholder');
-      return '/images/placeholder-apartment.svg';
-    }
-    
-    return data.publicUrl;
-  } catch (error) {
-    console.error('Error generating image URL:', error, path);
-    return '/images/placeholder-apartment.svg';
-  }
-};
+import { getImageUrl, preloadImages } from '../utils/imageUtils';
+import { measureAsync } from '../utils/performance';
 
 // Lazy-loaded image component with placeholder
 const LazyImage = memo(({ src, alt, className }) => {
@@ -330,182 +285,107 @@ export default function Home() {
     "Yaqshid"
   ];
   
-  // Memoized fetch function
+  // Memoized fetch function with optimization and performance monitoring
   const fetchApartments = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      // Reset apartments to prevent stale data display
-      setApartments([]);
-      
-      // Build filters object for debugging
-      const filters = {
-        minPrice,
-        maxPrice,
-        minRooms,
-        isFurnished,
-        selectedDistrict
-      };
-      
-      console.log('Fetching apartments with filters:', filters);
-      
-      // First, fetch apartments with their images
-      console.log('Starting apartment fetch...');
-      
-      let query = supabase
-        .from('apartments')
-        .select(`
-          *,
-          apartment_images(storage_path, is_primary),
-          apartment_floors(floor_status)
-        `)
-        .eq('status', 'approved');
-        
-      // More detailed logging
-      console.log('Query built:', {
-        table: 'apartments',
-        filters: {
-          status: 'approved'
-        }
-      });
-      
-      // Apply filters if they exist
-      if (minPrice) {
-        query = query.gte('price_per_month', parseInt(minPrice));
-      }
-      
-      if (maxPrice) {
-        query = query.lte('price_per_month', parseInt(maxPrice));
-      }
-      
-      if (minRooms) {
-        query = query.gte('rooms', parseInt(minRooms));
-      }
-      
-      if (isFurnished !== '') {
-        query = query.eq('is_furnished', isFurnished === 'true');
-      }
-      
-      if (selectedDistrict) {
-        query = query.eq('district', selectedDistrict);
-      }
-      
-      // Execute the query
-      console.log('Executing apartments query...');
-      
-      let queryData = null;  // Declare variable outside try block to make it accessible throughout the function
-      
+    await measureAsync('apartments-fetch', async () => {
       try {
-        const { data, error } = await query.order('created_at', { ascending: false });
-        queryData = data;  // Save data to our outer variable
-        
-        // Log the results for debugging
-        console.log('Apartments query result:', { 
-          success: !error,
-          dataReceived: data ? 'yes' : 'no', 
-          count: data?.length || 0,
-          error: error ? {
-            message: error.message,
-            details: error.details,
-            hint: error.hint,
-            code: error.code
-          } : null
-        });
-        
-        if (error) throw error;
-        
-        // Log first apartment data for debugging if available
-        if (data && data.length > 0) {
-          console.log('Sample apartment data:', {
-            id: data[0].id,
-            title: data[0].title,
-            hasImages: (data[0].apartment_images && data[0].apartment_images.length > 0) ? 'yes' : 'no',
-            imageCount: data[0].apartment_images?.length || 0
-          });
-        }
-      } catch (queryError) {
-        console.error('Error executing query:', queryError);
-        throw queryError;
-      }
-      
-      // If we have apartments, fetch the owner profiles separately
-      if (queryData && queryData.length > 0) {
-        console.log(`Processing ${queryData.length} apartments...`);
-        
-        try {
-          // Get all unique owner IDs
-          const ownerIds = [...new Set(queryData.map(apt => apt.owner_id))];
-          
-          // Fetch profiles for all owners
-          const { data: profilesData, error: profilesError } = await supabase
-            .from('profiles')
-            .select('id, full_name, whatsapp_number')
-            .in('id', ownerIds);
-            
-          if (!profilesError && profilesData) {
-            console.log(`Found ${profilesData.length} owner profiles`);
-            
-            // Create a map of owner_id to profile data
-            const ownerMap = profilesData.reduce((map, profile) => {
-              map[profile.id] = profile;
-              return map;
-            }, {});
-            
-            // Enrich apartment data with owner profile info
-            const enrichedData = queryData.map(apt => ({
-              ...apt,
-              owner: ownerMap[apt.owner_id] || null
-            }));
-            
-            // Update state with the enriched data and clear loading/error states
-            setApartments(enrichedData);
-            setLoading(false);
-            setError(null);
-          } else {
-            // If unable to fetch profiles, still show apartments
-            console.log('Could not fetch owner profiles, showing apartments without owner data');
-            setApartments(queryData);
-            setLoading(false);
-            setError(null);
-          }
-        } catch (profileError) {
-          console.error('Error fetching owner profiles:', profileError);
-          // If owner profiles fetch fails, still show apartments
-          setApartments(queryData);
-          setLoading(false);
-          setError(null);
-        }
-      } else {
-        // No apartments or queryData is null
-        console.log('No apartments found in query result');
-        setApartments([]);
-      }
-    } catch (error) {
-      console.error('Error fetching apartments:', error);
-      setError('Failed to load apartments. Please try again later.');
-      
-      // Still set apartments to empty array in case of error
-      setApartments([]);
-      
-      // Try to handle common error cases
-      if (error?.code === "PGRST116") {
-        console.log("Foreign key violation or invalid query parameters");
-      } else if (error?.message?.includes('JWT')) {
-        console.log("Authentication error, token may have expired");
-      }
-    } finally {
-      // Make sure loading state is cleared
-      setLoading(false);
-      
-      // Clear any stale error messages if we have apartments
-      if (apartments.length > 0) {
+        setLoading(true);
         setError(null);
+        
+        // Build optimized query with proper indexing
+        let query = supabase
+          .from('apartments')
+          .select(`
+            id,
+            title,
+            description,
+            location_description,
+            district,
+            rooms,
+            bathrooms,
+            price_per_month,
+            is_furnished,
+            is_available,
+            created_at,
+            primary_image_path,
+            owner_id,
+            apartment_images!inner(storage_path, is_primary),
+            apartment_floors(floor_status)
+          `)
+          .eq('status', 'approved')
+          .eq('is_available', true);
+        
+        // Apply filters efficiently using indexes
+        if (selectedDistrict) {
+          query = query.eq('district', selectedDistrict);
+        }
+        
+        if (minPrice) {
+          query = query.gte('price_per_month', parseInt(minPrice));
+        }
+        
+        if (maxPrice) {
+          query = query.lte('price_per_month', parseInt(maxPrice));
+        }
+        
+        if (minRooms) {
+          query = query.gte('rooms', parseInt(minRooms));
+        }
+        
+        if (isFurnished !== '') {
+          query = query.eq('is_furnished', isFurnished === 'true');
+        }
+        
+        // Limit results for better performance and add ordering
+        const { data: apartmentData, error: apartmentError } = await query
+          .order('created_at', { ascending: false })
+          .limit(50); // Limit to 50 apartments for better performance
+        
+        if (apartmentError) throw apartmentError;
+        
+        if (apartmentData && apartmentData.length > 0) {
+          // Get unique owner IDs and fetch profiles in one query
+          const ownerIds = [...new Set(apartmentData.map(apt => apt.owner_id))];
+          
+          const { data: profilesData } = await measureAsync('owner-profiles-fetch', () =>
+            supabase
+              .from('profiles')
+              .select('id, full_name, whatsapp_number')
+              .in('id', ownerIds)
+          );
+          
+          // Create owner map for quick lookup
+          const ownerMap = (profilesData || []).reduce((map, profile) => {
+            map[profile.id] = profile;
+            return map;
+          }, {});
+          
+          // Enrich apartment data
+          const enrichedData = apartmentData.map(apt => ({
+            ...apt,
+            owner: ownerMap[apt.owner_id] || null
+          }));
+          
+          // Preload images for better UX
+          const imagePaths = enrichedData
+            .flatMap(apt => apt.apartment_images || [])
+            .map(img => img.storage_path)
+            .filter(Boolean);
+          
+          measureAsync('image-preload', () => preloadImages(imagePaths));
+          
+          setApartments(enrichedData);
+        } else {
+          setApartments([]);
+        }
+      } catch (error) {
+        console.error('Error fetching apartments:', error);
+        setError('Failed to load apartments. Please try again later.');
+        setApartments([]);
+      } finally {
+        setLoading(false);
       }
-    }
-    
-    // We no longer need this timeout since we're handling loading state properly
-    // in the try/catch/finally blocks
+    });
   }, [minPrice, maxPrice, minRooms, isFurnished, selectedDistrict]);
 
   // Fetch apartments on component mount and when filters change

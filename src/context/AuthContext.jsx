@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { supabase, getProfileImageUrl } from '../lib/supabase';
+import { logAuthState, getOAuthErrorInfo, diagnoseAuthIssue } from '../utils/authDebug';
 
 const AuthContext = createContext();
 
@@ -263,51 +264,28 @@ export function AuthProvider({ children }) {
 
   // Function to fetch user profile and role
   const fetchUserProfile = async (userId, retryAttempt = 0) => {
-    const maxRetries = 2; // Maximum number of retry attempts
+    const maxRetries = 2;
     
     try {
-      console.log('Fetching profile for user:', userId);
-      console.log('Retry attempt:', retryAttempt);
-      
-      // Check current authentication state first
-      const { data: { user: currentUser }, error: authError } = await supabase.auth.getUser();
-      console.log('Current auth state:', {
-        currentUserId: currentUser?.id,
-        targetUserId: userId,
-        authError: authError?.message,
-        isAuthenticated: !!currentUser
-      });
-      
       // Check localStorage first for quick loading
       const cachedRole = getRoleFromLocalStorage(userId);
-      if (cachedRole) {
-        console.log('Found cached role:', cachedRole);
-        setUserRole(cachedRole);
-      }
-      
-      // Try to get cached profile data first
       const cachedProfile = getProfileFromLocalStorage(userId);
       const lastFetchTime = getProfileFetchTime(userId);
-      const profileCacheTTL = 5 * 60 * 1000; // 5 minutes
+      const profileCacheTTL = 10 * 60 * 1000; // Increased to 10 minutes for better performance
       
-      // Use cached profile if it exists and is fresh (within last 5 minutes)
+      // Use cached profile if it exists and is fresh
       if (cachedProfile && Date.now() - lastFetchTime < profileCacheTTL) {
-        console.log('Using cached profile data');
         setUserProfile(cachedProfile);
         setUserRoleWithPersistence(userId, cachedProfile.role || 'user');
-        
-        // Still fetch fresh data in the background
-        setTimeout(() => refreshProfileInBackground(userId), 100);
-        
         return cachedProfile;
       }
       
-      // Special case for known admin user (only if ADMIN_USER_ID env var is set)
+      // Special case for admin user
       if (ADMIN_USER_ID && userId === ADMIN_USER_ID) {
-        console.log('Admin user identified via environment variable');
-        saveRoleToLocalStorage(userId, 'admin');
+        if (cachedRole === 'admin' && cachedProfile) {
+          return cachedProfile;
+        }
         
-        // Get actual profile data for admin user
         const { data: adminProfile, error: adminProfileError } = await supabase
           .from('profiles')
           .select('*')
@@ -315,250 +293,103 @@ export function AuthProvider({ children }) {
           .single();
         
         if (!adminProfileError && adminProfile) {
-          // Process avatar URL if present
           adminProfile.avatar_url = processAvatarUrl(adminProfile.avatar_url);
-          
-          // Add the role field
-          const profileWithRole = {
-            ...adminProfile,
-            role: 'admin'
-          };
-          
-          // Save to localStorage
+          const profileWithRole = { ...adminProfile, role: 'admin' };
           saveProfileToLocalStorage(userId, profileWithRole);
-          
-          // Return actual profile with admin role
           return profileWithRole;
         }
       }
       
-      // For normal users, fetch profile and determine role
-      console.log('Attempting to fetch profile from database...');
-      
-      // Ensure we have proper authentication context before querying
-      if (!currentUser || currentUser.id !== userId) {
-        console.warn('Authentication context mismatch, waiting for proper auth state...');
-        
-        // Wait a bit and try to get the user again
-        await new Promise(resolve => setTimeout(resolve, 500));
-        const { data: { user: retryUser } } = await supabase.auth.getUser();
-        
-        if (!retryUser || retryUser.id !== userId) {
-          console.error('Still no proper authentication context after retry');
-          
-          // If we have cached data, use it
-          if (cachedProfile) {
-            console.log('Using cached profile due to auth context issues');
-            return cachedProfile;
-          }
-          
-          // Otherwise return a basic profile
-          return {
-            id: userId,
-            role: cachedRole || 'user',
-            created_at: new Date().toISOString()
-          };
-        }
-        
-        console.log('Authentication context established after retry');
-      }
-      
+      // Fetch profile from database
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .single();
       
-      console.log('Database query result:', {
-        hasData: !!profileData,
-        error: profileError?.message,
-        errorCode: profileError?.code
-      });
-      
       if (profileError) {
-        console.error('Error fetching profile:', profileError);
-        console.log('Profile error details:', {
-          code: profileError.code,
-          message: profileError.message,
-          details: profileError.details
-        });
-        
-        // Check if this is a "not found" error (profile doesn't exist)
+        // Handle profile not found for OAuth users
         if (profileError.code === 'PGRST116' || profileError.message.includes('No rows returned')) {
-          console.log('Profile not found, checking if this is an OAuth user');
-          
-          // Get the current user to check if they're an OAuth user
-          const { data: { user: currentUser }, error: userError } = await supabase.auth.getUser();
-          
-          if (userError) {
-            console.error('Error getting current user:', userError);
-          } else {
-            console.log('Current user data:', {
-              id: currentUser?.id,
-              email: currentUser?.email,
-              app_metadata: currentUser?.app_metadata,
-              user_metadata: currentUser?.user_metadata
-            });
-          }
+          const { data: { user: currentUser } } = await supabase.auth.getUser();
           
           if (currentUser && currentUser.id === userId) {
-            // Check if this user signed up via OAuth (has provider data)
             const provider = currentUser.app_metadata?.provider;
             const isOAuthUser = provider && provider !== 'email';
             
-            console.log('OAuth detection:', {
-              provider,
-              isOAuthUser,
-              hasUserMetadata: !!currentUser.user_metadata,
-              userMetadataKeys: Object.keys(currentUser.user_metadata || {})
-            });
-            
             if (isOAuthUser) {
-              console.log('OAuth user detected, creating profile');
               try {
                 const newProfile = await createProfileForOAuthUser(currentUser);
-                console.log('Profile creation result:', newProfile);
-                
-                // Save to localStorage
                 saveProfileToLocalStorage(userId, newProfile);
-                
                 return newProfile;
               } catch (createError) {
                 console.error('Error creating OAuth profile:', createError);
-                // Return a basic profile even if creation fails
                 return {
                   id: userId,
-                  full_name: currentUser.user_metadata?.full_name || currentUser.user_metadata?.name || 'User',
-                  avatar_url: processAvatarUrl(currentUser.user_metadata?.avatar_url || currentUser.user_metadata?.picture),
+                  full_name: currentUser.user_metadata?.full_name || 'User',
+                  avatar_url: processAvatarUrl(currentUser.user_metadata?.avatar_url),
                   role: 'user',
                   created_at: new Date().toISOString()
                 };
               }
-            } else {
-              console.log('Not an OAuth user, provider:', provider);
-            }
-          } else {
-            console.log('User ID mismatch or no current user');
-          }
-        } else {
-          console.log('Profile error is not a "not found" error');
-        }
-        
-        // If we've already tried a few times, just return what we have
-        if (retryAttempt >= maxRetries) {
-          console.warn(`Max retries (${maxRetries}) reached for profile fetch, using fallback`);
-          
-          // If we have a cached role, use it
-          if (cachedRole) {
-            return {
-              id: userId,
-              role: cachedRole,
-              created_at: new Date().toISOString()
-            };
-          }
-          
-          // Otherwise return a default profile
-          return {
-            id: userId,
-            role: 'user',
-            created_at: new Date().toISOString()
-          };
-        }
-        
-        // Try again after a short delay
-        console.log(`Retrying profile fetch (attempt ${retryAttempt + 1})`);
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        return fetchUserProfile(userId, retryAttempt + 1);
-      }
-      
-      if (profileData) {
-        console.log('Profile found in database:', profileData);
-        
-        // Get avatar URL if present
-        profileData.avatar_url = processAvatarUrl(profileData.avatar_url);
-        
-        // IMPORTANT CHANGE: Prioritize the role from the profiles table
-        let role = profileData.role || 'user';
-        
-        // Only override with admin role if specifically set in env var
-        if (userId === ADMIN_USER_ID) {
-          role = 'admin';
-        } 
-        // Only check owner_requests if role is not already set to owner or admin
-        else if (role !== 'owner' && role !== 'admin') {
-          // Check if user is an owner via owner_requests table
-          try {
-            const { data: ownerData } = await supabase
-              .from('owner_requests')
-              .select('status')
-              .eq('user_id', userId)
-              .eq('status', 'approved')
-              .maybeSingle();
-              
-            if (ownerData) {
-              role = 'owner';
-              
-              // Update the profile with owner role if needed
-              if (profileData.role !== 'owner') {
-                const { error: updateError } = await supabase
-                  .from('profiles')
-                  .update({ role: 'owner' })
-                  .eq('id', userId);
-                  
-                if (updateError) {
-                  console.warn('Failed to update profile with owner role:', updateError);
-                }
-              }
-            }
-          } catch (ownerCheckError) {
-            console.error('Error checking owner status:', ownerCheckError);
-            // If we can't check owner status, default to cached role or 'user'
-            if (!role) {
-              role = cachedRole || 'user';
             }
           }
         }
         
-        // Set profile with role
-        const profileWithRole = {
-          ...profileData,
-          role
-        };
+        // Retry logic
+        if (retryAttempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          return fetchUserProfile(userId, retryAttempt + 1);
+        }
         
-        console.log('Final profile with role:', profileWithRole);
-        
-        // Save to localStorage for next time
-        saveProfileToLocalStorage(userId, profileWithRole);
-        
-        return profileWithRole;
-      } else {
-        // No profile found, but we have a user ID, so create a default profile
-        console.log('No profile found for user, creating default');
-        const defaultProfile = {
+        // Fallback to cached data or default
+        return cachedProfile || {
           id: userId,
           role: cachedRole || 'user',
           created_at: new Date().toISOString()
         };
+      }
+      
+      // Process successful profile data
+      if (profileData) {
+        profileData.avatar_url = processAvatarUrl(profileData.avatar_url);
         
-        // Return the default profile
-        return defaultProfile;
+        // Determine role
+        let userRole = profileData.role || 'user';
+        if (ADMIN_USER_ID && userId === ADMIN_USER_ID) {
+          userRole = 'admin';
+        }
+        
+        const finalProfile = { ...profileData, role: userRole };
+        
+        // Save to localStorage and state
+        saveProfileToLocalStorage(userId, finalProfile);
+        setUserProfile(finalProfile);
+        setUserRoleWithPersistence(userId, userRole, cachedRole);
+        
+        return finalProfile;
       }
+      
+      // Fallback
+      return cachedProfile || {
+        id: userId,
+        role: 'user',
+        created_at: new Date().toISOString()
+      };
+      
     } catch (error) {
-      console.error('Error in fetchUserProfile:', error);
+      console.error('Unexpected error in fetchUserProfile:', error);
       
-      // Retry logic for unexpected errors
-      if (retryAttempt < maxRetries) {
-        console.log(`Retrying profile fetch after error (${retryAttempt + 1}/${maxRetries})...`);
-        const delay = Math.pow(2, retryAttempt) * 1000;
-        await new Promise(resolve => setTimeout(resolve, delay));
-        return fetchUserProfile(userId, retryAttempt + 1);
+      // Return cached data if available
+      const cachedProfile = getProfileFromLocalStorage(userId);
+      if (cachedProfile) {
+        return cachedProfile;
       }
       
-      // If we reached max retries, return a minimal profile to prevent UI errors
-      return { 
-        id: userId, 
-        role: cachedRole || 'user',
-        error: error.message 
+      // Final fallback
+      return {
+        id: userId,
+        role: getRoleFromLocalStorage(userId) || 'user',
+        created_at: new Date().toISOString()
       };
     }
   };
@@ -966,9 +797,18 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // Google Sign-in function
+  // Google Sign-in function with improved error handling
   const signInWithGoogle = async () => {
     try {
+      logAuthState('Google Sign-in Started');
+      
+      // Check if we're already in the middle of an OAuth flow
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('code') || urlParams.get('error')) {
+        logAuthState('OAuth flow already in progress', { urlParams: Object.fromEntries(urlParams) });
+        return { success: false, error: 'Authentication already in progress' };
+      }
+      
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
@@ -980,29 +820,107 @@ export function AuthProvider({ children }) {
         }
       });
       
-      if (error) throw error;
+      if (error) {
+        logAuthState('Google OAuth initiation error', { error });
+        throw error;
+      }
+      
+      logAuthState('Google OAuth initiated successfully', { data });
       return { success: true, data };
     } catch (error) {
-      console.error('Google sign-in error:', error);
+      logAuthState('Google sign-in error', { error: error.message });
       return { success: false, error: error.message };
     }
   };
 
-  // Handle OAuth callback
+  // Handle OAuth callback with improved error handling and timeout
   const handleAuthCallback = async () => {
     try {
-      const { data, error } = await supabase.auth.getSession();
+      logAuthState('Processing auth callback');
       
-      if (error) throw error;
+      // Add timeout to prevent hanging
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Authentication timeout')), 30000); // 30 seconds timeout
+      });
+      
+      // Check URL for OAuth errors first
+      const urlParams = new URLSearchParams(window.location.search);
+      const oauthError = urlParams.get('error');
+      const oauthErrorDescription = urlParams.get('error_description');
+      
+      if (oauthError) {
+        const friendlyError = getOAuthErrorInfo(oauthError);
+        logAuthState('OAuth error in URL', { 
+          error: oauthError, 
+          description: oauthErrorDescription,
+          friendlyError 
+        });
+        return { 
+          success: false, 
+          error: friendlyError || oauthErrorDescription || 'Authentication failed' 
+        };
+      }
+      
+      // Get session with timeout
+      const sessionPromise = supabase.auth.getSession();
+      const { data, error } = await Promise.race([sessionPromise, timeoutPromise]);
+      
+      if (error) {
+        logAuthState('Session retrieval error', { error });
+        throw error;
+      }
       
       if (data.session) {
-        // Session is already handled by the auth state change listener
+        logAuthState('Session found, authentication successful', { 
+          userId: data.session.user?.id,
+          expiresAt: data.session.expires_at 
+        });
+        
+        // Verify the session is valid and not expired
+        const expiresAt = data.session.expires_at;
+        const now = Math.floor(Date.now() / 1000);
+        
+        if (expiresAt && expiresAt < now) {
+          logAuthState('Session is expired', { expiresAt, now });
+          return { success: false, error: 'Session expired' };
+        }
+        
+        // Clear any OAuth parameters from URL
+        const cleanUrl = window.location.origin + window.location.pathname;
+        window.history.replaceState({}, document.title, cleanUrl);
+        
         return { success: true, session: data.session };
       }
       
-      return { success: false, error: 'No session found' };
+      // If no session but no error, try to handle edge cases
+      logAuthState('No session found, checking for pending authentication');
+      
+      // Wait a bit and try again (sometimes there's a delay)
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      const { data: retryData, error: retryError } = await supabase.auth.getSession();
+      
+      if (retryError) {
+        logAuthState('Retry session retrieval error', { error: retryError });
+        throw retryError;
+      }
+      
+      if (retryData.session) {
+        logAuthState('Session found on retry');
+        return { success: true, session: retryData.session };
+      }
+      
+      logAuthState('No session found after retry - generating diagnosis', diagnoseAuthIssue());
+      return { success: false, error: 'No session found - authentication may have been cancelled' };
+      
     } catch (error) {
-      console.error('Auth callback error:', error);
+      logAuthState('Auth callback error', { error: error.message, diagnosis: diagnoseAuthIssue() });
+      
+      // Handle specific error types
+      if (error.message === 'Authentication timeout') {
+        return { success: false, error: 'Authentication timed out. Please try again.' };
+      }
+      
       return { success: false, error: error.message };
     }
   };

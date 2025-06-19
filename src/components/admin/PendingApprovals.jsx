@@ -1,44 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import LoadingSpinner from '../ui/LoadingSpinner';
-
-// Utility function to get image URL from storage path
-const getImageUrl = (path) => {
-  if (!path || path.trim() === '') {
-    return '/images/placeholder-apartment.svg';
-  }
-  
-  if (path.startsWith('http://') || path.startsWith('https://')) {
-    return path;
-  } 
-  
-  try {
-    let normalizedPath = path.trim();
-    
-    if (normalizedPath.includes('apartment_images/')) {
-      normalizedPath = normalizedPath.split('apartment_images/')[1];
-    } else if (!normalizedPath.includes('/')) {
-      normalizedPath = `apartments/${normalizedPath}`;
-    }
-    
-    if (!normalizedPath || normalizedPath === '') {
-      return '/images/placeholder-apartment.svg';
-    }
-    
-    const { data } = supabase.storage
-      .from('apartment_images')
-      .getPublicUrl(normalizedPath);
-    
-    if (data && data.publicUrl && data.publicUrl.trim() !== '') {
-      return data.publicUrl;
-    } else {
-      return '/images/placeholder-apartment.svg';
-    }
-  } catch (error) {
-    console.error('Error generating image URL:', error, path);
-    return '/images/placeholder-apartment.svg';
-  }
-};
+import { getImageUrl } from '../../utils/imageUtils';
 
 const PendingApprovals = () => {
   const [pendingListings, setPendingListings] = useState([]);

@@ -4,47 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { supabase, uploadApartmentImage } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
-
-// Utility function to get image URL from storage path
-const getImageUrl = (path) => {
-  if (!path) {
-    console.log('No path provided, returning placeholder');
-    return '/images/placeholder-apartment.svg';
-  }
-  
-  // If it's already a complete URL (for demo/sample data)
-  if (path.startsWith('http://') || path.startsWith('https://')) {
-    console.log('Path is already a URL, returning as-is');
-    return path;
-  } 
-  
-  // For storage paths
-  try {
-    // Handle different path formats
-    let normalizedPath = path;
-    
-    if (path.includes('apartment_images/')) {
-      // If the path includes the bucket name already, extract just the path part
-      console.log('Path includes bucket name, normalizing');
-      normalizedPath = path.split('apartment_images/')[1];
-    } else if (!path.includes('/')) {
-      // If it's just a filename, assume it's in the apartments folder
-      console.log('Path is just filename, adding apartments/ prefix');
-      normalizedPath = `apartments/${path}`;
-    }
-    
-    console.log('Getting public URL for normalized path:', normalizedPath);
-    const { data } = supabase.storage
-      .from('apartment_images')
-      .getPublicUrl(normalizedPath);
-    
-    console.log('Generated URL:', data.publicUrl);
-    return data.publicUrl || '/images/placeholder-apartment.svg';
-  } catch (error) {
-    console.error('Error generating image URL:', error, path);
-    return '/images/placeholder-apartment.svg';
-  }
-};
+import { getImageUrl } from '../utils/imageUtils';
 
 // Sub-components for dashboard tabs
 const MyListings = () => {

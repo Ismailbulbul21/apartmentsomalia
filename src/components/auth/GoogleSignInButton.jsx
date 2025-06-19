@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useAuth } from '../../context/AuthContext';
 
@@ -7,34 +7,66 @@ export default function GoogleSignInButton({ className = '', disabled = false })
   const [error, setError] = useState('');
   const { signInWithGoogle } = useAuth();
 
+  // Clear loading state if component unmounts or if disabled changes
+  useEffect(() => {
+    if (disabled) {
+      setLoading(false);
+    }
+  }, [disabled]);
+
+  // Auto-clear error after 5 seconds
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => {
+        setError('');
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
+
   const handleGoogleSignIn = async () => {
     try {
       setError('');
       setLoading(true);
       
-      const result = await signInWithGoogle();
+      // Add timeout to prevent indefinite loading
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Sign-in request timed out')), 15000); // 15 seconds
+      });
+      
+      const signInPromise = signInWithGoogle();
+      const result = await Promise.race([signInPromise, timeoutPromise]);
       
       if (!result.success) {
         throw new Error(result.error || 'Failed to sign in with Google');
       }
       
-      // The redirect will be handled by Google OAuth flow
+      // Keep loading state as user will be redirected
+      // Don't set loading to false here as the redirect should happen
+      
     } catch (err) {
+      console.error('Google sign-in button error:', err);
       setError(err.message);
       setLoading(false);
     }
   };
 
   return (
-    <div className="w-full">
+    <div>
       {error && (
         <motion.div 
           className="mb-4 bg-red-900/30 border border-red-800 text-red-200 px-4 py-3 rounded-lg text-sm"
           initial={{ opacity: 0, height: 0 }}
           animate={{ opacity: 1, height: 'auto' }}
+          exit={{ opacity: 0, height: 0 }}
           transition={{ duration: 0.3 }}
         >
-          {error}
+          <div className="flex items-center">
+            <svg className="w-4 h-4 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span>{error}</span>
+          </div>
         </motion.div>
       )}
       
@@ -52,7 +84,7 @@ export default function GoogleSignInButton({ className = '', disabled = false })
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
-            <span className="text-gray-700">Signing in...</span>
+            <span className="text-gray-700">Connecting to Google...</span>
           </>
         ) : (
           <>
@@ -66,6 +98,17 @@ export default function GoogleSignInButton({ className = '', disabled = false })
           </>
         )}
       </motion.button>
+      
+      {loading && (
+        <motion.p 
+          className="mt-2 text-xs text-night-400 text-center"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 2 }}
+        >
+          If nothing happens, please check if popups are blocked
+        </motion.p>
+      )}
     </div>
   );
 } 

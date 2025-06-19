@@ -6,6 +6,7 @@ import LoadingSpinner from '../components/ui/LoadingSpinner';
 export default function AuthCallback() {
   const [status, setStatus] = useState('processing');
   const [error, setError] = useState('');
+  const [retryCount, setRetryCount] = useState(0);
   const { handleAuthCallback } = useAuth();
   const navigate = useNavigate();
 
@@ -13,6 +14,9 @@ export default function AuthCallback() {
     const handleCallback = async () => {
       try {
         setStatus('processing');
+        
+        // Add a small delay to ensure URL parameters are available
+        await new Promise(resolve => setTimeout(resolve, 500));
         
         const result = await handleAuthCallback();
         
@@ -27,13 +31,29 @@ export default function AuthCallback() {
           setError(result.error || 'Authentication failed');
         }
       } catch (err) {
+        console.error('Auth callback error:', err);
         setStatus('error');
         setError(err.message || 'An unexpected error occurred');
       }
     };
 
     handleCallback();
-  }, [handleAuthCallback, navigate]);
+  }, [handleAuthCallback, navigate, retryCount]);
+
+  const handleRetry = () => {
+    if (retryCount < 2) { // Allow up to 2 retries
+      setRetryCount(prev => prev + 1);
+      setStatus('processing');
+      setError('');
+    } else {
+      // After 2 retries, redirect to login
+      navigate('/login', { replace: true });
+    }
+  };
+
+  const handleBackToLogin = () => {
+    navigate('/login', { replace: true });
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4 py-12 bg-gradient-to-b from-night-950 to-night-900">
@@ -42,11 +62,21 @@ export default function AuthCallback() {
           <>
             <LoadingSpinner />
             <h2 className="text-xl font-semibold text-white mt-4">
-              Completing sign-in...
+              {retryCount > 0 ? 'Retrying sign-in...' : 'Completing sign-in...'}
             </h2>
             <p className="text-night-400">
-              Please wait while we finish setting up your account.
+              {retryCount > 0 
+                ? `Attempt ${retryCount + 1} of 3` 
+                : 'Please wait while we finish setting up your account.'
+              }
             </p>
+            {retryCount === 0 && (
+              <div className="mt-4">
+                <div className="text-xs text-night-500">
+                  This usually takes just a few seconds
+                </div>
+              </div>
+            )}
           </>
         )}
         
@@ -76,15 +106,36 @@ export default function AuthCallback() {
             <h2 className="text-xl font-semibold text-white">
               Sign-in failed
             </h2>
-            <p className="text-red-400 mb-4">
+            <p className="text-red-400 mb-6">
               {error}
             </p>
-            <button
-              onClick={() => navigate('/login')}
-              className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-            >
-              Back to Login
-            </button>
+            
+            <div className="space-y-3">
+              {retryCount < 2 ? (
+                <button
+                  onClick={handleRetry}
+                  className="w-full px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium"
+                >
+                  Try Again ({2 - retryCount} attempts left)
+                </button>
+              ) : null}
+              
+              <button
+                onClick={handleBackToLogin}
+                className="w-full px-6 py-3 bg-night-700 text-white rounded-lg hover:bg-night-600 transition-colors border border-night-600"
+              >
+                Back to Login
+              </button>
+            </div>
+            
+            <div className="mt-6 text-xs text-night-500">
+              <p>Common issues:</p>
+              <ul className="mt-2 space-y-1 text-left">
+                <li>• Popup blockers preventing sign-in</li>
+                <li>• Third-party cookies disabled</li>
+                <li>• Network connectivity issues</li>
+              </ul>
+            </div>
           </>
         )}
       </div>

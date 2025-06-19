@@ -1,47 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
-
-// Utility function to get image URL from storage path
-const getImageUrl = (path) => {
-  if (!path || path.trim() === '') {
-    return '/images/placeholder-apartment.svg';
-  }
-  
-  if (path.startsWith('http://') || path.startsWith('https://')) {
-    return path;
-  } 
-  
-  try {
-    let normalizedPath = path.trim();
-    
-    if (normalizedPath.includes('apartment_images/')) {
-      normalizedPath = normalizedPath.split('apartment_images/')[1];
-    } else if (!normalizedPath.includes('/')) {
-      normalizedPath = `apartments/${normalizedPath}`;
-    }
-    
-    if (!normalizedPath || normalizedPath === '') {
-      return '/images/placeholder-apartment.svg';
-    }
-    
-    const { data } = supabase.storage
-      .from('apartment_images')
-      .getPublicUrl(normalizedPath);
-    
-    if (data && data.publicUrl && data.publicUrl.trim() !== '') {
-      return data.publicUrl;
-    } else {
-      return '/images/placeholder-apartment.svg';
-    }
-  } catch (error) {
-    console.error('Error generating image URL:', error, path);
-    return '/images/placeholder-apartment.svg';
-  }
-};
+import { getImageUrl } from '../utils/imageUtils';
 
 // Image viewer modal component
 const ImageViewerModal = ({ images, activeIndex, onClose, onPrev, onNext }) => {
