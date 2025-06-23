@@ -66,8 +66,8 @@ self.addEventListener('fetch', (event) => {
     return;
   }
   
-  // Skip Supabase API calls
-  if (url.hostname.includes('supabase.co')) {
+  // Skip Supabase API calls but ALLOW storage images
+  if (url.hostname.includes('supabase.co') && !url.pathname.includes('/storage/v1/object/public/')) {
     return;
   }
   

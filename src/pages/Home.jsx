@@ -6,72 +6,84 @@ import { Link } from 'react-router-dom';
 import { getImageUrl, preloadImages, testImageUrls } from '../utils/imageUtils';
 import { measureAsync } from '../utils/performance';
 
-// Lazy-loaded image component with placeholder
+// Fast-loading image component with optimization
 const LazyImage = memo(({ src, alt, className }) => {
   const [isLoaded, setIsLoaded] = useState(false);
   const [error, setError] = useState(false);
-  const [imageSrc, setImageSrc] = useState(null);
+  const [imageSrc, setImageSrc] = useState('/images/placeholder-apartment.svg');
+  const [showSpinner, setShowSpinner] = useState(false);
   
   useEffect(() => {
-    // Process the src to get the correct URL or a placeholder
     if (!src || src.trim() === '') {
       setImageSrc('/images/placeholder-apartment.svg');
-    } else {
-      const processedSrc = getImageUrl(src);
-      setImageSrc(processedSrc);
-      console.log('🖼️ LazyImage processing:', src, '→', processedSrc);
+      setIsLoaded(true);
+      return;
     }
+    
+    // Show spinner only after a short delay to avoid flashing
+    const spinnerTimer = setTimeout(() => setShowSpinner(true), 200);
+    
+    // Process URL and start loading immediately
+    const processedSrc = getImageUrl(src);
+    
+    // Preload the image
+    const img = new Image();
+    img.onload = () => {
+      clearTimeout(spinnerTimer);
+      setImageSrc(processedSrc);
+      setIsLoaded(true);
+      setShowSpinner(false);
+    };
+    img.onerror = () => {
+      clearTimeout(spinnerTimer);
+      setError(true);
+      setShowSpinner(false);
+    };
+    img.src = processedSrc;
+    
+    return () => clearTimeout(spinnerTimer);
   }, [src]);
-  
-  const handleLoad = () => {
-    console.log('✅ Image loaded successfully:', imageSrc);
-    setIsLoaded(true);
-  };
-  
-  const handleError = (e) => {
-    console.error('❌ Image failed to load:', imageSrc);
-    setError(true);
-  };
-  
-  // Return early with placeholder if no valid source
-  if (!imageSrc) {
-    return (
-      <div className={`${className} relative overflow-hidden bg-night-800`}>
-        <img 
-          src="/images/placeholder-apartment.svg" 
-          alt="Placeholder" 
-          className="w-full h-full object-cover"
-        />
-      </div>
-    );
-  }
   
   return (
     <div className={`${className} relative overflow-hidden bg-night-800`}>
-      {!isLoaded && !error && (
-        <div className="absolute inset-0 flex items-center justify-center bg-night-800">
-          <div className="w-8 h-8 border-4 border-primary-300 border-t-primary-600 rounded-full animate-spin"></div>
+      {/* Background placeholder - always visible */}
+      <div className="absolute inset-0 bg-gradient-to-br from-night-700 to-night-800 flex items-center justify-center">
+        <svg className="w-12 h-12 text-night-600" fill="currentColor" viewBox="0 0 20 20">
+          <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
+        </svg>
+      </div>
+      
+      {/* Loading spinner - only show after delay */}
+      {showSpinner && !isLoaded && !error && (
+        <div className="absolute inset-0 flex items-center justify-center bg-night-800/80">
+          <div className="w-6 h-6 border-2 border-primary-300 border-t-primary-600 rounded-full animate-spin"></div>
         </div>
       )}
       
-      {error && (
-        <div className="absolute inset-0 flex items-center justify-center bg-night-800">
-          <img 
-            src="/images/placeholder-apartment.svg" 
-            alt="Placeholder" 
-            className="w-full h-full object-cover opacity-50"
-          />
-        </div>
-      )}
-      
+      {/* Actual image */}
       <img 
         src={imageSrc}
         alt={alt || "Apartment image"}
-        className={`w-full h-full object-cover transition-all duration-500 ${isLoaded ? 'opacity-100' : 'opacity-0'}`}
-        onLoad={handleLoad}
-        onError={handleError}
+        className={`w-full h-full object-cover transition-opacity duration-300 ${
+          isLoaded ? 'opacity-100' : 'opacity-0'
+        }`}
+        onLoad={() => setIsLoaded(true)}
+        onError={() => setError(true)}
         loading="lazy"
+        decoding="async"
       />
+      
+      {/* Error state overlay */}
+      {error && (
+        <div className="absolute inset-0 flex items-center justify-center bg-night-800/90">
+          <div className="text-center text-night-400">
+            <svg className="w-8 h-8 mx-auto mb-2" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+            </svg>
+            <span className="text-xs">Image unavailable</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 });
@@ -362,15 +374,32 @@ export default function Home() {
             owner: ownerMap[apt.owner_id] || null
           }));
           
-          // Preload images for better UX
+          // Smart image preloading - only first few images for faster initial load
           const imagePaths = enrichedData
-            .flatMap(apt => apt.apartment_images || [])
-            .map(img => img.storage_path)
+            .slice(0, 6) // Only preload first 6 apartments
+            .flatMap(apt => {
+              if (apt.apartment_images && apt.apartment_images.length > 0) {
+                // Only preload the primary image or first image
+                const primaryImage = apt.apartment_images.find(img => img.is_primary);
+                const imageToPreload = primaryImage || apt.apartment_images[0];
+                return imageToPreload ? [imageToPreload.storage_path] : [];
+              }
+              return apt.primary_image_path ? [apt.primary_image_path] : [];
+            })
             .filter(Boolean);
           
           if (imagePaths.length > 0) {
-            console.log('🖼️ Preloading', imagePaths.length, 'images');
-            measureAsync('image-preload', () => preloadImages(imagePaths));
+            console.log('🖼️ Smart preloading', imagePaths.length, 'primary images');
+            // Use requestIdleCallback for non-blocking preload
+            if ('requestIdleCallback' in window) {
+              requestIdleCallback(() => {
+                measureAsync('image-preload', () => preloadImages(imagePaths));
+              });
+            } else {
+              setTimeout(() => {
+                measureAsync('image-preload', () => preloadImages(imagePaths));
+              }, 100);
+            }
           }
           
           setApartments(enrichedData);

@@ -1,15 +1,20 @@
 import { supabase } from '../lib/supabase';
 
-// Cache for image URLs to avoid repeated Supabase calls
+// Enhanced cache for image URLs with better performance
 const imageUrlCache = new Map();
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+const CACHE_DURATION = 30 * 60 * 1000; // 30 minutes - longer cache for better performance
+const MAX_CACHE_SIZE = 1000; // Prevent memory leaks
 
 /**
- * Centralized function to get image URL from storage path with caching
+ * Centralized function to get image URL from storage path with caching and optimization
  * @param {string} path - The storage path of the image
+ * @param {Object} options - Optional parameters for image optimization
+ * @param {number} options.width - Desired width for optimization
+ * @param {number} options.height - Desired height for optimization
+ * @param {string} options.quality - Image quality (low, medium, high)
  * @returns {string} The public URL of the image, or placeholder if not found
  */
-export const getImageUrl = (path) => {
+export const getImageUrl = (path, options = {}) => {
   // Handle undefined, null, or empty strings
   if (!path || path.trim() === '') {
     return '/images/placeholder-apartment.svg';
@@ -20,11 +25,19 @@ export const getImageUrl = (path) => {
     return path;
   }
   
-  // Check cache first
-  const cacheKey = path;
+  // Create cache key including options
+  const cacheKey = `${path}_${JSON.stringify(options)}`;
   const cached = imageUrlCache.get(cacheKey);
   if (cached && (Date.now() - cached.timestamp) < CACHE_DURATION) {
     return cached.url;
+  }
+  
+  // Clean cache if it gets too large
+  if (imageUrlCache.size > MAX_CACHE_SIZE) {
+    const entries = Array.from(imageUrlCache.entries());
+    // Remove oldest 20% of entries
+    const toRemove = Math.floor(entries.length * 0.2);
+    entries.slice(0, toRemove).forEach(([key]) => imageUrlCache.delete(key));
   }
   
   try {
@@ -54,14 +67,24 @@ export const getImageUrl = (path) => {
       return '/images/placeholder-apartment.svg';
     }
     
+    let finalUrl = data.publicUrl;
+    
+    // Add optimization parameters if supported (Supabase doesn't support transform yet, but ready for future)
+    if (options.width || options.height || options.quality) {
+      const urlObj = new URL(finalUrl);
+      if (options.width) urlObj.searchParams.set('width', options.width);
+      if (options.height) urlObj.searchParams.set('height', options.height);
+      if (options.quality) urlObj.searchParams.set('quality', options.quality);
+      finalUrl = urlObj.toString();
+    }
+    
     // Cache the result
     imageUrlCache.set(cacheKey, {
-      url: data.publicUrl,
+      url: finalUrl,
       timestamp: Date.now()
     });
     
-    console.log('🖼️ Generated URL:', normalizedPath, '→', data.publicUrl);
-    return data.publicUrl;
+    return finalUrl;
   } catch (error) {
     console.error('🖼️ Error generating image URL:', error, 'for path:', path);
     return '/images/placeholder-apartment.svg';
@@ -69,35 +92,71 @@ export const getImageUrl = (path) => {
 };
 
 /**
- * Preload images for better UX
+ * Fast preload images with priority and batching
  * @param {string[]} imagePaths - Array of image paths to preload
+ * @param {Object} options - Preload options
+ * @param {number} options.batchSize - Number of images to preload at once
+ * @param {number} options.delay - Delay between batches in ms
  */
-export const preloadImages = (imagePaths) => {
+export const preloadImages = (imagePaths, options = {}) => {
   if (!Array.isArray(imagePaths) || imagePaths.length === 0) {
-    console.log('🖼️ preloadImages: No images to preload');
     return Promise.resolve();
   }
   
-  console.log('🖼️ preloadImages: Starting to preload', imagePaths.length, 'images');
+  const { batchSize = 3, delay = 100 } = options;
   
-  const promises = imagePaths.map(path => {
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.onload = () => {
-        console.log('🖼️ preloadImages: Successfully preloaded:', path);
-        resolve();
-      };
-      img.onerror = () => {
-        console.warn('🖼️ preloadImages: Failed to preload:', path);
-        resolve(); // Still resolve on error to not block other images
-      };
-      img.src = getImageUrl(path);
-    });
-  });
+  console.log('🖼️ Fast preloading', imagePaths.length, 'images in batches of', batchSize);
   
-  return Promise.all(promises).then(() => {
-    console.log('🖼️ preloadImages: Completed preloading all images');
-  });
+  const preloadBatch = (paths) => {
+    return Promise.all(
+      paths.map(path => {
+        return new Promise((resolve) => {
+          const img = new Image();
+          img.onload = () => resolve(true);
+          img.onerror = () => resolve(false);
+          img.src = getImageUrl(path);
+        });
+      })
+    );
+  };
+  
+  const processBatches = async () => {
+    for (let i = 0; i < imagePaths.length; i += batchSize) {
+      const batch = imagePaths.slice(i, i + batchSize);
+      await preloadBatch(batch);
+      
+      // Small delay between batches to not overwhelm the browser
+      if (i + batchSize < imagePaths.length) {
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  };
+  
+  return processBatches();
+};
+
+/**
+ * Create an intersection observer for lazy loading images
+ * @param {Function} callback - Function to call when element is visible
+ * @param {Object} options - Observer options
+ */
+export const createImageObserver = (callback, options = {}) => {
+  const defaultOptions = {
+    root: null,
+    rootMargin: '50px', // Start loading 50px before element is visible
+    threshold: 0.1
+  };
+  
+  if ('IntersectionObserver' in window) {
+    return new IntersectionObserver(callback, { ...defaultOptions, ...options });
+  }
+  
+  // Fallback for browsers without IntersectionObserver
+  return {
+    observe: () => {},
+    unobserve: () => {},
+    disconnect: () => {}
+  };
 };
 
 /**
