@@ -789,11 +789,11 @@ export default function ApartmentDetail() {
               </div>
               
               {/* Quick Contact Buttons */}
-              {owner && user && user.id !== apartment.owner_id && (
+              {user && user.id !== apartment.owner_id && (
                 <div className="space-y-3">
-                  {owner.whatsapp_number && (
+                  {(apartment.whatsapp_number || (owner && owner.whatsapp_number)) && (
                     <a 
-                      href={`https://wa.me/${owner.whatsapp_number.replace(/\D/g, '')}?text=Salaan, waxaan xiiseynayaa gurigaaga: ${apartment.title}`}
+                      href={`https://wa.me/${(apartment.whatsapp_number || owner.whatsapp_number).replace(/\D/g, '')}?text=Salaan, waxaan xiiseynayaa gurigaaga: ${apartment.title}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="w-full flex items-center justify-center px-6 py-4 bg-green-600 hover:bg-green-700 text-white rounded-xl transition-colors font-bold text-lg"
@@ -818,7 +818,7 @@ export default function ApartmentDetail() {
             </div>
             
             {/* Owner Info Card */}
-            {owner && (
+            {(apartment.display_owner_name || owner) && (
               <div className="bg-gray-800 rounded-2xl p-6 shadow-2xl border border-gray-700">
                 <h3 className="text-xl font-bold text-white mb-4 flex items-center">
                   <svg className="w-6 h-6 mr-2 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -829,11 +829,13 @@ export default function ApartmentDetail() {
                 
                 <div className="flex items-center">
                   <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-xl font-bold mr-4">
-                    {owner.full_name?.charAt(0) || 'M'}
+                    {(apartment.display_owner_name || owner?.full_name)?.charAt(0) || 'M'}
                   </div>
                   <div>
-                    <p className="font-bold text-lg text-white">{owner.full_name || "Mulkiile"}</p>
-                    {owner.business_name && (
+                    <p className="font-bold text-lg text-white">
+                      {apartment.display_owner_name || owner?.full_name || "Mulkiile"}
+                    </p>
+                    {owner?.business_name && !apartment.display_owner_name && (
                       <p className="text-gray-400">{owner.business_name}</p>
                     )}
                   </div>
@@ -996,9 +998,9 @@ export default function ApartmentDetail() {
                   ) : floor.floor_status === 'available' && owner ? (
                     // Regular user contact buttons
                     <div className="space-y-3">
-                      {owner.whatsapp_number && (
+                      {(apartment.whatsapp_number || (owner && owner.whatsapp_number)) && (
                         <a 
-                          href={`https://wa.me/${owner.whatsapp_number.replace(/\D/g, '')}?text=Salaan, waxaan xiiseynayaa ${getFloorLabel(floor.floor_number, apartmentFloors.length)} ee gurigaaga: ${apartment.title}`}
+                          href={`https://wa.me/${(apartment.whatsapp_number || owner.whatsapp_number).replace(/\D/g, '')}?text=Salaan, waxaan xiiseynayaa ${getFloorLabel(floor.floor_number, apartmentFloors.length)} ee gurigaaga: ${apartment.title}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="w-full flex items-center justify-center px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl transition-colors font-medium"

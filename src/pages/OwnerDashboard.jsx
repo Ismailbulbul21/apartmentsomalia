@@ -675,7 +675,7 @@ const Reviews = () => {
 };
 
 const NewListing = () => {
-  const { user } = useAuth();
+  const { user, isAdminUser } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [imageFiles, setImageFiles] = useState([]);
@@ -693,7 +693,9 @@ const NewListing = () => {
     district: '',
     is_furnished: false,
     total_floors: 1,
-    has_floor_system: true
+    has_floor_system: true,
+    whatsapp_number: '',
+    display_owner_name: ''
   });
   
   // Floor data state
@@ -834,7 +836,9 @@ const NewListing = () => {
         is_furnished: formData.is_furnished,
         is_available: true,
         status: 'pending',
-          owner_id: user.id,
+        owner_id: user.id,
+        whatsapp_number: formData.whatsapp_number.trim(),
+        display_owner_name: formData.display_owner_name.trim() || null,
         created_at: new Date().toISOString()
       };
       
@@ -978,6 +982,50 @@ const NewListing = () => {
                   placeholder="Qor faahfaahin dheeraad ah oo ku saabsan guriga..."
                 />
               </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  📱 WhatsApp Number
+                </label>
+                <input
+                  type="tel"
+                  value={formData.whatsapp_number}
+                  onChange={(e) => setFormData(prev => ({ ...prev, whatsapp_number: e.target.value }))}
+                  className="w-full px-3 py-3 text-base border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Tusaale: +252 61 1234567"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Dadka raba guriga waxay kugu soo waci karaan WhatsApp
+                </p>
+              </div>
+              
+              {/* Admin-Only: Custom Owner Name */}
+              {isAdminUser && (
+                <div className="lg:col-span-2 border-4 border-red-500 bg-red-50 p-4 rounded-lg">
+                  <div className="flex items-center mb-2">
+                    <span className="text-lg mr-2">👑</span>
+                    <h4 className="text-lg font-bold text-red-800">Admin Only - Customer Information</h4>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-red-700 mb-2">
+                      Real Owner Name (Customer's Name)
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.display_owner_name}
+                      onChange={(e) => setFormData(prev => ({ ...prev, display_owner_name: e.target.value }))}
+                      className="w-full px-3 py-3 text-base border border-red-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                      placeholder="Tusaale: Ahmed Mohamed Ali"
+                    />
+                    <p className="text-xs text-red-600 mt-1">
+                      ⚠️ Only for customers who cannot create accounts. Leave empty for regular owners.
+                    </p>
+                    <p className="text-xs text-red-600 mt-1">
+                      📱 Make sure WhatsApp above is the customer's number, not yours!
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
                   
             
@@ -1305,7 +1353,8 @@ const EditListing = () => {
     district: '',
     is_furnished: false,
     total_floors: 1,
-    has_floor_system: true
+    has_floor_system: true,
+    whatsapp_number: ''
   });
   
   // Floor data state
@@ -1354,7 +1403,8 @@ const EditListing = () => {
           district: apartmentData.district || '',
           is_furnished: apartmentData.is_furnished || false,
           total_floors: 1, // Will be updated when floors are loaded
-          has_floor_system: apartmentData.has_floor_system || true
+          has_floor_system: apartmentData.has_floor_system || true,
+          whatsapp_number: apartmentData.whatsapp_number || ''
         });
         
         // Set existing images
@@ -1564,6 +1614,7 @@ const EditListing = () => {
         bathrooms: totalBathrooms,
         price_per_month: minPrice,
         is_furnished: formData.is_furnished,
+        whatsapp_number: formData.whatsapp_number.trim(),
         updated_at: new Date().toISOString()
       };
       
@@ -1791,6 +1842,22 @@ const EditListing = () => {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
                 placeholder="Qor faahfaahin dheeraad ah oo ku saabsan guriga..."
               />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                📱 WhatsApp Number
+              </label>
+              <input
+                type="tel"
+                value={formData.whatsapp_number}
+                onChange={(e) => setFormData(prev => ({ ...prev, whatsapp_number: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                placeholder="Tusaale: +252 61 1234567"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Dadka raba guriga waxay kugu soo waci karaan WhatsApp
+              </p>
             </div>
             
             <div className="flex items-center">

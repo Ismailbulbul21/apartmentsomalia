@@ -180,13 +180,13 @@ const ApartmentCard = memo(({ apartment }) => {
           </div>
         </div>
         
-        {/* Owner name */}
-        {apartment.owner && apartment.owner.full_name && (
+        {/* Owner name - Show custom name if set, otherwise show profile name */}
+        {(apartment.display_owner_name || (apartment.owner && apartment.owner.full_name)) && (
           <div className="mt-3 flex items-center text-xs text-night-400">
             <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
             </svg>
-            <span>Milkiile: {apartment.owner.full_name}</span>
+            <span>Milkiile: {apartment.display_owner_name || apartment.owner.full_name}</span>
           </div>
         )}
         
@@ -302,6 +302,8 @@ export default function Home() {
             created_at,
             primary_image_path,
             owner_id,
+            whatsapp_number,
+            display_owner_name,
             apartment_images(storage_path, is_primary),
             apartment_floors(floor_status)
           `)
