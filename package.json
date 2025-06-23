@@ -6,8 +6,13 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:analyze": "vite build --mode analyze",
+    "build:prod": "npm run lint && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "lint:fix": "eslint . --fix",
+    "preview": "vite preview",
+    "clean": "rm -rf dist",
+    "deploy": "npm run build:prod && echo 'Build complete! Deploy the dist folder to your hosting provider.'"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.4",

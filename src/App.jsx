@@ -50,23 +50,37 @@ class ErrorBoundary extends React.Component {
 }
 
 // Preload critical components to avoid loading flashes
-const preloadedComponents = [
-  './pages/Home',
-  './pages/UserProfile',
-  './pages/OwnerDashboard',
-  './pages/AdminDashboard'
-];
+const preloadCriticalComponents = () => {
+  // Only preload on production and after initial load
+  if (import.meta.env.PROD && typeof window !== 'undefined') {
+    // Use requestIdleCallback for better performance
+    const preloadWhenIdle = (callback) => {
+      if ('requestIdleCallback' in window) {
+        requestIdleCallback(callback);
+      } else {
+        setTimeout(callback, 100);
+      }
+    };
+    
+    preloadWhenIdle(() => {
+      import('./pages/Home').catch(() => {});
+      import('./pages/UserProfile').catch(() => {});
+    });
+    
+    preloadWhenIdle(() => {
+      import('./pages/OwnerDashboard').catch(() => {});
+      import('./pages/AdminDashboard').catch(() => {});
+    });
+  }
+};
 
-// Preload important components
-preloadedComponents.forEach(path => {
-  const preloadComponent = () => import(/* @vite-ignore */ path);
-  preloadComponent();
-});
+// Start preloading after a short delay
+setTimeout(preloadCriticalComponents, 2000);
 
-// Lazy loaded pages with retry logic
-const lazyWithRetry = (componentImport) => {
+// Lazy loaded pages with improved retry logic and fallback
+const lazyWithRetry = (componentImport, componentName = 'Component') => {
   return lazy(() => {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       const maxRetries = 3;
       let retries = 0;
       
@@ -74,13 +88,37 @@ const lazyWithRetry = (componentImport) => {
         componentImport()
           .then(resolve)
           .catch(error => {
+            console.error(`Failed to load ${componentName}:`, error);
+            
             if (retries < maxRetries) {
               retries++;
-              console.log(`Retrying import (${retries}/${maxRetries})...`);
-              setTimeout(attempt, 1000 * retries); // Increasing backoff
+              console.log(`Retrying ${componentName} import (${retries}/${maxRetries})...`);
+              
+              // Progressive backoff with jitter
+              const delay = 1000 * retries + Math.random() * 500;
+              setTimeout(attempt, delay);
             } else {
-              console.error('Component import failed after retries:', error);
-              reject(error);
+              console.error(`${componentName} import failed after ${maxRetries} retries`);
+              
+              // Provide a fallback component instead of complete failure
+              resolve({
+                default: () => (
+                  <div className="min-h-screen flex items-center justify-center bg-gray-50">
+                    <div className="text-center p-8 max-w-md bg-white rounded-lg shadow-lg">
+                      <h2 className="text-2xl text-red-600 font-bold mb-4">Loading Error</h2>
+                      <p className="text-gray-700 mb-4">
+                        Failed to load {componentName}. This might be due to a network issue.
+                      </p>
+                      <button
+                        onClick={() => window.location.reload()}
+                        className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                      >
+                        Reload Page
+                      </button>
+                    </div>
+                  </div>
+                )
+              });
             }
           });
       }
@@ -90,20 +128,20 @@ const lazyWithRetry = (componentImport) => {
   });
 };
 
-// Lazy loaded pages with retry mechanism
-const Home = lazyWithRetry(() => import('./pages/Home'));
-const Login = lazyWithRetry(() => import('./pages/Login'));
-const Signup = lazyWithRetry(() => import('./pages/Signup'));
-const AuthCallback = lazyWithRetry(() => import('./pages/AuthCallback'));
-const ApartmentDetail = lazyWithRetry(() => import('./pages/ApartmentDetail'));
-const OwnerDashboard = lazyWithRetry(() => import('./pages/OwnerDashboard'));
-const AdminDashboard = lazyWithRetry(() => import('./pages/AdminDashboard'));
-const UserProfile = lazyWithRetry(() => import('./pages/UserProfile'));
-const BecomeOwner = lazyWithRetry(() => import('./pages/BecomeOwner'));
-const Contact = lazyWithRetry(() => import('./pages/Contact'));
-const NotFound = lazyWithRetry(() => import('./pages/NotFound'));
-const WriteReview = lazyWithRetry(() => import('./pages/WriteReview'));
-const ImageTest = lazyWithRetry(() => import('./components/ImageTest'));
+// Lazy loaded pages with retry mechanism and proper naming
+const Home = lazyWithRetry(() => import('./pages/Home'), 'Home');
+const Login = lazyWithRetry(() => import('./pages/Login'), 'Login');
+const Signup = lazyWithRetry(() => import('./pages/Signup'), 'Signup');
+const AuthCallback = lazyWithRetry(() => import('./pages/AuthCallback'), 'AuthCallback');
+const ApartmentDetail = lazyWithRetry(() => import('./pages/ApartmentDetail'), 'ApartmentDetail');
+const OwnerDashboard = lazyWithRetry(() => import('./pages/OwnerDashboard'), 'OwnerDashboard');
+const AdminDashboard = lazyWithRetry(() => import('./pages/AdminDashboard'), 'AdminDashboard');
+const UserProfile = lazyWithRetry(() => import('./pages/UserProfile'), 'UserProfile');
+const BecomeOwner = lazyWithRetry(() => import('./pages/BecomeOwner'), 'BecomeOwner');
+const Contact = lazyWithRetry(() => import('./pages/Contact'), 'Contact');
+const NotFound = lazyWithRetry(() => import('./pages/NotFound'), 'NotFound');
+const WriteReview = lazyWithRetry(() => import('./pages/WriteReview'), 'WriteReview');
+const ImageTest = lazyWithRetry(() => import('./components/ImageTest'), 'ImageTest');
 
 // Protected route component with improved loading state
 const ProtectedRoute = ({ children, allowedRoles = [] }) => {
