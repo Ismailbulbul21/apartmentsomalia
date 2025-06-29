@@ -964,7 +964,7 @@ const NewListing = () => {
               
               <div className="lg:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Faahfaahin Guriga
+                  Faahfaahin Apartment
                 </label>
                 <textarea
                   value={formData.description}
@@ -1227,23 +1227,10 @@ const NewListing = () => {
                       onChange={(e) => updateFloor(index, 'floor_status', e.target.value)}
                       className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
-                      <option value="available">Waa la heli karaa (Available for rent)</option>
-                      <option value="not_available">Lama heli karo (Not available/Rented)</option>
+                      <option value="available">Waa la heli karaa</option>
+                      <option value="not_available">Lama heli karo</option>
                     </select>
                         </div>
-                  
-            <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Faahfaahin Dabaqda
-                </label>
-                    <textarea
-                      value={floor.floor_description}
-                      onChange={(e) => updateFloor(index, 'floor_description', e.target.value)}
-                      rows={2}
-                      className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Faahfaahin dheeraad ah oo ku saabsan dabaqdan..."
-                    />
-                      </div>
                     </div>
                   ))}
             </div>
