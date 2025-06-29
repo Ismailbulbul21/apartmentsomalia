@@ -668,8 +668,8 @@ const NewListing = () => {
   const [imagePreviews, setImagePreviews] = useState([]);
   const [primaryImageIndex, setPrimaryImageIndex] = useState(0);
   
-  // Debug log to verify component is rendering
-  console.log('NewListing component is rendering - floor system should be visible');
+  // Debug log to verify component is rendering - UPDATED
+  console.log('NewListing component is rendering - floor system should be visible - CHANGES APPLIED');
   
   // Form state
   const [formData, setFormData] = useState({
