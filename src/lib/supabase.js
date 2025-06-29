@@ -37,23 +37,6 @@ const supabaseOptions = {
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, supabaseOptions);
 
 /**
- * Helper function to recover user session
- * @returns {Promise<void>}
- */
-export const recoverSession = async () => {
-  try {
-    const { data, error } = await supabase.auth.getSession();
-    if (error) {
-      console.error('Error recovering session:', error);
-    }
-    return data;
-  } catch (error) {
-    console.error('Error in recoverSession:', error);
-    return null;
-  }
-};
-
-/**
  * Helper function to upload an image to storage and create a record in apartment_images
  * @param {File} file - The image file to upload
  * @param {string} apartmentId - The ID of the apartment
