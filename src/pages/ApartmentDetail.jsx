@@ -154,7 +154,6 @@ export default function ApartmentDetail() {
               apartment_images(id, storage_path, is_primary)
             `)
             .eq('id', id)
-            .eq('status', 'approved')
             .single();
           
         if (apartmentError) throw apartmentError;
@@ -789,21 +788,21 @@ export default function ApartmentDetail() {
               </div>
               
               {/* Quick Contact Buttons - ALWAYS VISIBLE */}
-              <div className="space-y-3">
+                <div className="space-y-3">
                 {/* WhatsApp Button - Always show if WhatsApp number exists */}
                 {(apartment.whatsapp_number || (owner && owner.whatsapp_number)) && (
-                  <a 
+                    <a 
                     href={`https://wa.me/${(apartment.whatsapp_number || owner.whatsapp_number).replace(/\D/g, '')}?text=Salaan, waxaan xiiseynayaa gurigaaga: ${apartment.title}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-full flex items-center justify-center px-6 py-4 bg-green-600 hover:bg-green-700 text-white rounded-xl transition-colors font-bold text-lg"
-                  >
-                    <svg className="w-6 h-6 mr-3" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z" />
-                    </svg>
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full flex items-center justify-center px-6 py-4 bg-green-600 hover:bg-green-700 text-white rounded-xl transition-colors font-bold text-lg"
+                    >
+                      <svg className="w-6 h-6 mr-3" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z" />
+                      </svg>
                     📱 WhatsApp Contact
-                  </a>
-                )}
+                    </a>
+                  )}
                 
                 {/* Message Button - Only for logged in users who are not owners */}
                 {user && user.id !== apartment.owner_id && (
@@ -816,7 +815,7 @@ export default function ApartmentDetail() {
                     </svg>
                     Fariin Dir
                   </button>
-                )}
+              )}
               </div>
             </div>
             
@@ -1018,25 +1017,25 @@ export default function ApartmentDetail() {
                       
                       {/* Message Button - Only for logged in users */}
                       {user && (
-                        <button 
-                          onClick={handleNavigateToMessages}
-                          className="w-full flex items-center justify-center px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-colors font-medium"
-                        >
-                          <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                          </svg>
-                          Fariin Dir
-                        </button>
+                      <button 
+                        onClick={handleNavigateToMessages}
+                        className="w-full flex items-center justify-center px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-colors font-medium"
+                      >
+                        <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                        </svg>
+                        Fariin Dir
+                      </button>
                       )}
                       
                       {/* Status message for unavailable floors */}
                       {floor.floor_status !== 'available' && (
                         <div className="text-center py-2 bg-gray-700 rounded-xl">
                           <p className="text-gray-400 text-sm font-medium">
-                            {floor.floor_status === 'occupied' && '🏠 Dabaqan hadda waa la kireeyay'}
-                            {floor.floor_status === 'not_available' && '❌ Dabaqan hadda lama heli karo'}
-                            {floor.floor_status === 'maintenance' && '🔧 Dabaqan waa dayactir'}
-                          </p>
+                        {floor.floor_status === 'occupied' && '🏠 Dabaqan hadda waa la kireeyay'}
+                        {floor.floor_status === 'not_available' && '❌ Dabaqan hadda lama heli karo'}
+                        {floor.floor_status === 'maintenance' && '🔧 Dabaqan waa dayactir'}
+                      </p>
                         </div>
                       )}
                     </div>

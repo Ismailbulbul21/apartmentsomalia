@@ -323,15 +323,8 @@ const MyListings = () => {
                       <p className="text-gray-600 text-sm mb-2">{apartment.location_description}</p>
                     </div>
                     <div className="flex items-center space-x-2">
-                      <span className={`px-2 py-1 text-xs rounded-full ${
-                        apartment.status === 'approved' 
-                          ? 'bg-green-100 text-green-800'
-                          : apartment.status === 'pending'
-                            ? 'bg-yellow-100 text-yellow-800'
-                            : 'bg-red-100 text-red-800'
-                      }`}>
-                        {apartment.status === 'approved' ? 'La Ansixiyay' : 
-                         apartment.status === 'pending' ? 'Sugitaan' : 'La Diiday'}
+                      <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">
+                        La Daabacay
                       </span>
                       <span className={`px-2 py-1 text-xs rounded-full ${
                         apartment.is_available 
@@ -835,7 +828,7 @@ const NewListing = () => {
         price_per_month: minPrice,
         is_furnished: formData.is_furnished,
         is_available: true,
-        status: 'pending',
+        status: 'approved',
         owner_id: user.id,
         whatsapp_number: formData.whatsapp_number.trim(),
         display_owner_name: formData.display_owner_name.trim() || null,
@@ -887,7 +880,7 @@ const NewListing = () => {
         
       if (floorsError) throw floorsError;
       
-      alert('Liiskaaga waa la sameeyay! Waxaa la diraa maamulka si ay u ansixiyaan.');
+      alert('Liiskaaga waa la sameeyay oo waa la daabacay! Dadka ayaa hadda arki kara.');
         navigate('/owner/dashboard');
       
     } catch (error) {

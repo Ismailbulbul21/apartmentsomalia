@@ -5,21 +5,19 @@ import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
 
 // Import admin components
-import PendingApprovals from './PendingApprovals';
 import ManageUsers from './ManageUsers';
 import AllListings from './AllListings';
 import PendingOwners from './PendingOwners';
 
 // Dashboard tabs
 const tabs = [
-  { name: 'Pending Approvals', path: 'pending', icon: '⏰' },
   { name: 'Pending Owners', path: 'owners', icon: '🔑' },
   { name: 'Manage Users', path: 'users', icon: '👥' },
   { name: 'All Listings', path: 'listings', icon: '🏠' },
 ];
 
 const AdminDashboard = () => {
-  const [activeTab, setActiveTab] = useState('pending');
+  const [activeTab, setActiveTab] = useState('owners');
   const { user, refreshUserProfile } = useAuth();
   
   // Ensure user profile is loaded in admin dashboard
@@ -84,11 +82,10 @@ const AdminDashboard = () => {
       {/* Content */}
       <div className="bg-gray-50 rounded-lg p-3 md:p-6">
         <Routes>
-          <Route path="pending" element={<PendingApprovals />} />
           <Route path="owners" element={<PendingOwners />} />
           <Route path="users" element={<ManageUsers />} />
           <Route path="listings" element={<AllListings />} />
-          <Route path="/" element={<Navigate to="/admin/dashboard/pending" replace />} />
+          <Route path="/" element={<Navigate to="/admin/dashboard/owners" replace />} />
         </Routes>
       </div>
     </motion.div>

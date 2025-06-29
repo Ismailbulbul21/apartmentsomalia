@@ -110,12 +110,12 @@ export const preloadImages = (imagePaths, options = {}) => {
   const preloadBatch = (paths) => {
     return Promise.all(
       paths.map(path => {
-        return new Promise((resolve) => {
-          const img = new Image();
+    return new Promise((resolve) => {
+      const img = new Image();
           img.onload = () => resolve(true);
           img.onerror = () => resolve(false);
-          img.src = getImageUrl(path);
-        });
+      img.src = getImageUrl(path);
+    });
       })
     );
   };

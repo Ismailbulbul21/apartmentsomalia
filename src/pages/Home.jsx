@@ -31,12 +31,12 @@ const LazyImage = memo(({ src, alt, className }) => {
     img.onload = () => {
       clearTimeout(spinnerTimer);
       setImageSrc(processedSrc);
-      setIsLoaded(true);
+    setIsLoaded(true);
       setShowSpinner(false);
-    };
+  };
     img.onerror = () => {
       clearTimeout(spinnerTimer);
-      setError(true);
+    setError(true);
       setShowSpinner(false);
     };
     img.src = processedSrc;
@@ -51,7 +51,7 @@ const LazyImage = memo(({ src, alt, className }) => {
         <svg className="w-12 h-12 text-night-600" fill="currentColor" viewBox="0 0 20 20">
           <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
         </svg>
-      </div>
+        </div>
       
       {/* Loading spinner - only show after delay */}
       {showSpinner && !isLoaded && !error && (
@@ -318,8 +318,7 @@ export default function Home() {
             display_owner_name,
             apartment_images(storage_path, is_primary),
             apartment_floors(floor_status)
-          `)
-          .eq('status', 'approved');
+          `);
         
         // Apply filters efficiently using indexes
         if (selectedDistrict) {
@@ -393,7 +392,7 @@ export default function Home() {
             // Use requestIdleCallback for non-blocking preload
             if ('requestIdleCallback' in window) {
               requestIdleCallback(() => {
-                measureAsync('image-preload', () => preloadImages(imagePaths));
+            measureAsync('image-preload', () => preloadImages(imagePaths));
               });
             } else {
               setTimeout(() => {
