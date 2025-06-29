@@ -95,15 +95,8 @@ const MyListings = () => {
     try {
       setUpdatingFloor(floorId);
       
-      // Cycle through statuses: available -> not_available -> occupied -> maintenance -> available
-      const statusCycle = {
-        'available': 'not_available',
-        'not_available': 'occupied', 
-        'occupied': 'maintenance',
-        'maintenance': 'available'
-      };
-      
-      const newStatus = statusCycle[currentStatus] || 'available';
+      // Simple toggle: available <-> not_available
+      const newStatus = currentStatus === 'available' ? 'not_available' : 'available';
       
       const { error } = await supabase
         .from('apartment_floors')
@@ -199,13 +192,13 @@ const MyListings = () => {
 
   const getStatusBadge = (status) => {
     const statusConfig = {
-      'available': { label: 'La Kireyn Karaa', color: 'bg-green-100 text-green-800', icon: '✓' },
-      'not_available': { label: 'Lama Heli Karo', color: 'bg-gray-100 text-gray-800', icon: '✕' },
-      'occupied': { label: 'La Kireeyay', color: 'bg-red-100 text-red-800', icon: '●' },
-      'maintenance': { label: 'Dayactir', color: 'bg-yellow-100 text-yellow-800', icon: '⚠' }
+      'available': { label: 'Waa la heli karaa', color: 'bg-green-100 text-green-800', icon: '✓' },
+      'not_available': { label: 'Lama heli karo', color: 'bg-red-100 text-red-800', icon: '✕' }
     };
     
-    const config = statusConfig[status] || statusConfig['not_available'];
+    // Map old statuses to new simplified ones
+    const normalizedStatus = status === 'available' ? 'available' : 'not_available';
+    const config = statusConfig[normalizedStatus];
     
     return (
       <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${config.color}`}>
@@ -1230,14 +1223,12 @@ const NewListing = () => {
                       Xaaladda Dabaqda
             </label>
                     <select
-                      value={floor.floor_status}
+                      value={floor.floor_status === 'available' ? 'available' : 'not_available'}
                       onChange={(e) => updateFloor(index, 'floor_status', e.target.value)}
                       className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
-                      <option value="available">La Kireyn Karaa</option>
-                      <option value="not_available">Lama Heli Karo</option>
-                      <option value="occupied">La Kireeyay</option>
-                      <option value="maintenance">Dayactir</option>
+                      <option value="available">Waa la heli karaa (Available for rent)</option>
+                      <option value="not_available">Lama heli karo (Not available/Rented)</option>
                     </select>
                         </div>
                   
@@ -1258,42 +1249,7 @@ const NewListing = () => {
             </div>
           </div>
           
-          {/* Floor System Toggle */}
-          <div className="mb-6">
-            <label className="flex items-center">
-              <input
-                type="checkbox"
-                checked={formData.has_floor_system}
-                onChange={(e) => setFormData(prev => ({ ...prev, has_floor_system: e.target.checked }))}
-                className="mr-2"
-              />
-              <span className="text-sm font-medium text-gray-700">
-                Isticmaal nidaamka dabaqyada (Floor System)
-              </span>
-            </label>
-            <p className="text-xs text-gray-500 mt-1">
-              Haddii aad doorato, waxaad awood u yeelan doontaa inaad u qaybiiso gurigaaga dabaqyo kala duwan oo qiimo kala duwan leh.
-            </p>
-          </div>
-          
-          {/* Total Floors */}
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Tirada dabaqyada: {formData.total_floors}
-            </label>
-            <input
-              type="range"
-              min="1"
-              max="10"
-              value={formData.total_floors}
-              onChange={(e) => handleTotalFloorsChange(parseInt(e.target.value))}
-              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-            />
-            <div className="flex justify-between text-xs text-gray-500 mt-1">
-              <span>1 dabaq</span>
-              <span>10 dabaq</span>
-            </div>
-          </div>
+          {/* Note: Floor system is handled above in the main floors section */}
           
           {/* Submit Button */}
           <div className="flex flex-col sm:flex-row justify-end space-y-3 sm:space-y-0 sm:space-x-4 pt-6 border-t border-gray-200">
@@ -2111,14 +2067,12 @@ const EditListing = () => {
                       Xaaladda Dabaqda
             </label>
                     <select
-                      value={floor.floor_status}
+                      value={floor.floor_status === 'available' ? 'available' : 'not_available'}
                       onChange={(e) => updateFloor(index, 'floor_status', e.target.value)}
                       className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
-                      <option value="available">La Kireyn Karaa</option>
-                      <option value="not_available">Lama Heli Karo</option>
-                      <option value="occupied">La Kireeyay</option>
-                      <option value="maintenance">Dayactir</option>
+                      <option value="available">Waa la heli karaa (Available for rent)</option>
+                      <option value="not_available">Lama heli karo (Not available/Rented)</option>
                     </select>
                         </div>
                   
@@ -2139,42 +2093,7 @@ const EditListing = () => {
             </div>
           </div>
           
-          {/* Floor System Toggle */}
-          <div className="mb-6">
-            <label className="flex items-center">
-              <input
-                type="checkbox"
-                checked={formData.has_floor_system}
-                onChange={(e) => setFormData(prev => ({ ...prev, has_floor_system: e.target.checked }))}
-                className="mr-2"
-              />
-              <span className="text-sm font-medium text-gray-700">
-                Isticmaal nidaamka dabaqyada (Floor System)
-              </span>
-            </label>
-            <p className="text-xs text-gray-500 mt-1">
-              Haddii aad doorato, waxaad awood u yeelan doontaa inaad u qaybiiso gurigaaga dabaqyo kala duwan oo qiimo kala duwan leh.
-            </p>
-          </div>
-          
-          {/* Total Floors */}
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Tirada dabaqyada: {formData.total_floors}
-            </label>
-            <input
-              type="range"
-              min="1"
-              max="10"
-              value={formData.total_floors}
-              onChange={(e) => handleTotalFloorsChange(parseInt(e.target.value))}
-              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-            />
-            <div className="flex justify-between text-xs text-gray-500 mt-1">
-              <span>1 dabaq</span>
-              <span>10 dabaq</span>
-            </div>
-          </div>
+          {/* Note: Floor system is handled above in the main floors section */}
           
           {/* Submit Button */}
           <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
