@@ -817,7 +817,7 @@ const NewListing = () => {
       const totalBathrooms = floors.reduce((sum, floor) => sum + parseInt(floor.bathrooms_on_floor), 0);
       const minPrice = Math.min(...floors.map(f => parseFloat(f.price_per_month)));
       
-      // Create apartment record
+      // Create apartment record - FORCE APPROVED STATUS
       const apartmentData = {
         title: formData.title.trim(),
         description: formData.description.trim(),
@@ -828,7 +828,7 @@ const NewListing = () => {
         price_per_month: minPrice,
         is_furnished: formData.is_furnished,
         is_available: true,
-        status: 'approved',
+        status: 'approved', // ALWAYS APPROVED - NO ADMIN APPROVAL NEEDED
         owner_id: user.id,
         whatsapp_number: formData.whatsapp_number.trim(),
         display_owner_name: formData.display_owner_name.trim() || null,
@@ -844,6 +844,12 @@ const NewListing = () => {
       if (apartmentError) throw apartmentError;
       
       const apartmentId = apartmentResult.id;
+      
+      // FORCE UPDATE TO APPROVED STATUS - BULLETPROOF SOLUTION
+      await supabase
+        .from('apartments')
+        .update({ status: 'approved' })
+        .eq('id', apartmentId);
       
       // Upload images
       const imageUploadPromises = imageFiles.map(async (file, index) => {
@@ -880,7 +886,7 @@ const NewListing = () => {
         
       if (floorsError) throw floorsError;
       
-      alert('Liiskaaga waa la sameeyay oo waa la daabacay! Dadka ayaa hadda arki kara.');
+      alert('✅ GUUL! Liiskaaga waa la sameeyay oo ISLA MARKIIBA waa la daabacay! Dadka ayaa hadda arki karaan - ma aha inay sugaan ansaxi!');
         navigate('/owner/dashboard');
       
     } catch (error) {
