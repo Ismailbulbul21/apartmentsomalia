@@ -186,6 +186,12 @@ export const testImageUrls = () => {
   testPaths.forEach(path => {
     const url = getImageUrl(path);
     console.log(`🧪 Path: ${path} → URL: ${url}`);
+    
+    // Test if the URL is accessible
+    const img = new Image();
+    img.onload = () => console.log(`✅ Image loaded successfully: ${path}`);
+    img.onerror = () => console.error(`❌ Failed to load image: ${path} from URL: ${url}`);
+    img.src = url;
   });
 };
 

@@ -14,44 +14,68 @@ const LazyImage = memo(({ src, alt, className }) => {
   const [showSpinner, setShowSpinner] = useState(false);
   
   useEffect(() => {
+    console.log(`🖼️ LazyImage processing src: ${src}`);
+    
     if (!src || src.trim() === '') {
+      console.log('🖼️ No src provided, using placeholder');
       setImageSrc('/images/placeholder-apartment.svg');
       setIsLoaded(true);
+      setError(false);
       return;
     }
     
+    // Reset states for new image
+    setIsLoaded(false);
+    setError(false);
+    setShowSpinner(false);
+    
     // Show spinner only after a short delay to avoid flashing
-    const spinnerTimer = setTimeout(() => setShowSpinner(true), 200);
+    const spinnerTimer = setTimeout(() => {
+      if (!isLoaded && !error) {
+        setShowSpinner(true);
+      }
+    }, 200);
     
     // Process URL and start loading immediately
     const processedSrc = getImageUrl(src);
+    console.log(`🖼️ Processed URL: ${processedSrc}`);
     
     // Preload the image
     const img = new Image();
     img.onload = () => {
+      console.log(`✅ Image loaded successfully: ${processedSrc}`);
       clearTimeout(spinnerTimer);
       setImageSrc(processedSrc);
-    setIsLoaded(true);
+      setIsLoaded(true);
       setShowSpinner(false);
-  };
-    img.onerror = () => {
+      setError(false);
+    };
+    img.onerror = (e) => {
+      console.error(`❌ Failed to load image: ${processedSrc}`, e);
       clearTimeout(spinnerTimer);
-    setError(true);
+      setError(true);
       setShowSpinner(false);
+      setIsLoaded(false);
     };
     img.src = processedSrc;
     
-    return () => clearTimeout(spinnerTimer);
+    return () => {
+      clearTimeout(spinnerTimer);
+      img.onload = null;
+      img.onerror = null;
+    };
   }, [src]);
   
   return (
     <div className={`${className} relative overflow-hidden bg-night-800`}>
-      {/* Background placeholder - always visible */}
-      <div className="absolute inset-0 bg-gradient-to-br from-night-700 to-night-800 flex items-center justify-center">
-        <svg className="w-12 h-12 text-night-600" fill="currentColor" viewBox="0 0 20 20">
-          <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
-        </svg>
+      {/* Background placeholder - only show when not loaded and no error */}
+      {!isLoaded && !error && (
+        <div className="absolute inset-0 bg-gradient-to-br from-night-700 to-night-800 flex items-center justify-center">
+          <svg className="w-12 h-12 text-night-600" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
+          </svg>
         </div>
+      )}
       
       {/* Loading spinner - only show after delay */}
       {showSpinner && !isLoaded && !error && (
@@ -60,15 +84,19 @@ const LazyImage = memo(({ src, alt, className }) => {
         </div>
       )}
       
-      {/* Actual image */}
+      {/* Actual image - always render but control visibility */}
       <img 
         src={imageSrc}
         alt={alt || "Apartment image"}
         className={`w-full h-full object-cover transition-opacity duration-300 ${
-          isLoaded ? 'opacity-100' : 'opacity-0'
+          isLoaded && !error ? 'opacity-100' : 'opacity-0'
         }`}
-        onLoad={() => setIsLoaded(true)}
-        onError={() => setError(true)}
+        onLoad={() => {
+          console.log(`🖼️ DOM image rendered: ${imageSrc}`);
+        }}
+        onError={(e) => {
+          console.error(`🖼️ DOM image failed to render: ${imageSrc}`, e);
+        }}
         loading="lazy"
         decoding="async"
       />
