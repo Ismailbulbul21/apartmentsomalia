@@ -23,37 +23,102 @@ const AllListings = () => {
       const from = pageIndex * pageSize;
       const to = from + pageSize - 1;
       
-      // Use direct query instead of RPC function for better reliability
-      let query = supabase
-        .from('apartments')
-        .select(`
-          *,
-          apartment_images(id, storage_path, is_primary),
-          profiles!apartments_owner_id_fkey(id, full_name)
-        `, { count: 'exact' })
-        .order('created_at', { ascending: false })
-        .range(from, to);
+      // Try to use the RPC function for better performance
+      let query;
+      let data;
+      let count = 0;
+      let error;
       
-      // Apply filter if not 'all'
-      if (status !== 'all') {
-        query = query.eq('status', status);
+      // Use the RPC function we created
+      const { data: rpcData, error: rpcError, count: rpcCount } = await supabase
+        .rpc('get_apartments_with_profiles');
+      
+      if (rpcError) {
+        console.error('Failed to use RPC function, falling back to manual join:', rpcError);
+        
+        // Fallback to the original approach
+        query = supabase
+          .from('apartments')
+          .select(`
+            *,
+            apartment_images(id, storage_path, is_primary)
+          `, { count: 'exact' })
+          .order('created_at', { ascending: false })
+          .range(from, to);
+        
+        // Apply filter if not 'all'
+        if (status !== 'all') {
+          query = query.eq('status', status);
+        }
+        
+        const result = await query;
+        data = result.data;
+        error = result.error;
+        count = result.count;
+        
+        if (error) throw error;
+        
+        // If we have apartments, fetch their owner profiles
+        if (data && data.length > 0) {
+          // Get all owner IDs
+          const ownerIds = data.map(apt => apt.owner_id);
+          
+          // Fetch profiles for these owner IDs
+          const { data: profilesData, error: profilesError } = await supabase
+            .from('profiles')
+            .select('id, full_name')
+            .in('id', ownerIds);
+            
+          if (profilesError) throw profilesError;
+          
+          // Create a map of owner_id -> profile for easier lookup
+          const ownerProfiles = {};
+          if (profilesData) {
+            profilesData.forEach(profile => {
+              ownerProfiles[profile.id] = profile;
+            });
+          }
+          
+          // Combine apartments with their owner profiles
+          const processedData = data.map(apt => {
+            return {
+              ...apt,
+              owner_profile: ownerProfiles[apt.owner_id] || null
+            };
+          });
+          
+          // Set the processed data
+          data = processedData;
+        }
+      } else {
+        // The RPC function worked, use its data
+        data = rpcData;
+        count = rpcCount || data.length;
+        
+        // Add the owner_profile field for compatibility with existing code
+        data = data.map(apt => ({
+          ...apt,
+          owner_profile: {
+            id: apt.owner_id,
+            full_name: apt.owner_full_name
+          }
+        }));
+        
+        // Apply filter if not 'all'
+        if (status !== 'all') {
+          data = data.filter(apt => apt.status === status);
+          count = data.length;
+        }
+        
+        // Apply pagination manually
+        data = data.slice(from, to + 1);
       }
-      
-      const { data, error, count } = await query;
-      
-      if (error) throw error;
-      
-      // Process the data to ensure proper structure
-      const processedData = (data || []).map(apt => ({
-        ...apt,
-        owner_profile: apt.profiles || null
-      }));
       
       // Update the state with the data
       if (pageIndex === 0) {
-        setApartments(processedData);
+        setApartments(data || []);
       } else {
-        setApartments(prevData => [...prevData, ...processedData]);
+        setApartments(prevData => [...prevData, ...(data || [])]);
       }
       
       setHasMore(count > (pageIndex + 1) * pageSize);

@@ -95,8 +95,15 @@ const MyListings = () => {
     try {
       setUpdatingFloor(floorId);
       
-      // Simple toggle: available <-> not_available
-      const newStatus = currentStatus === 'available' ? 'not_available' : 'available';
+      // Cycle through statuses: available -> not_available -> occupied -> maintenance -> available
+      const statusCycle = {
+        'available': 'not_available',
+        'not_available': 'occupied', 
+        'occupied': 'maintenance',
+        'maintenance': 'available'
+      };
+      
+      const newStatus = statusCycle[currentStatus] || 'available';
       
       const { error } = await supabase
         .from('apartment_floors')
@@ -192,13 +199,13 @@ const MyListings = () => {
 
   const getStatusBadge = (status) => {
     const statusConfig = {
-      'available': { label: 'Waa la heli karaa', color: 'bg-green-100 text-green-800', icon: '✓' },
-      'not_available': { label: 'Lama heli karo', color: 'bg-red-100 text-red-800', icon: '✕' }
+      'available': { label: 'La Kireyn Karaa', color: 'bg-green-100 text-green-800', icon: '✓' },
+      'not_available': { label: 'Lama Heli Karo', color: 'bg-gray-100 text-gray-800', icon: '✕' },
+      'occupied': { label: 'La Kireeyay', color: 'bg-red-100 text-red-800', icon: '●' },
+      'maintenance': { label: 'Dayactir', color: 'bg-yellow-100 text-yellow-800', icon: '⚠' }
     };
     
-    // Map old statuses to new simplified ones
-    const normalizedStatus = status === 'available' ? 'available' : 'not_available';
-    const config = statusConfig[normalizedStatus];
+    const config = statusConfig[status] || statusConfig['not_available'];
     
     return (
       <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${config.color}`}>
@@ -668,7 +675,8 @@ const NewListing = () => {
   const [imagePreviews, setImagePreviews] = useState([]);
   const [primaryImageIndex, setPrimaryImageIndex] = useState(0);
   
-  // Component is rendering correctly
+  // Debug log to verify component is rendering
+  console.log('NewListing component is rendering - floor system should be visible');
   
   // Form state
   const [formData, setFormData] = useState({
@@ -963,7 +971,7 @@ const NewListing = () => {
               
               <div className="lg:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Faahfaahin Apartment
+                  Faahfaahin Guriga
                 </label>
                 <textarea
                   value={formData.description}
@@ -1222,20 +1230,70 @@ const NewListing = () => {
                       Xaaladda Dabaqda
             </label>
                     <select
-                      value={floor.floor_status === 'available' ? 'available' : 'not_available'}
+                      value={floor.floor_status}
                       onChange={(e) => updateFloor(index, 'floor_status', e.target.value)}
                       className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
-                      <option value="available">Waa la heli karaa</option>
-                      <option value="not_available">Lama heli karo</option>
+                      <option value="available">La Kireyn Karaa</option>
+                      <option value="not_available">Lama Heli Karo</option>
+                      <option value="occupied">La Kireeyay</option>
+                      <option value="maintenance">Dayactir</option>
                     </select>
                         </div>
+                  
+            <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Faahfaahin Dabaqda
+                </label>
+                    <textarea
+                      value={floor.floor_description}
+                      onChange={(e) => updateFloor(index, 'floor_description', e.target.value)}
+                      rows={2}
+                      className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Faahfaahin dheeraad ah oo ku saabsan dabaqdan..."
+                    />
+                      </div>
                     </div>
                   ))}
             </div>
           </div>
           
-          {/* Note: Floor system is handled above in the main floors section */}
+          {/* Floor System Toggle */}
+          <div className="mb-6">
+            <label className="flex items-center">
+              <input
+                type="checkbox"
+                checked={formData.has_floor_system}
+                onChange={(e) => setFormData(prev => ({ ...prev, has_floor_system: e.target.checked }))}
+                className="mr-2"
+              />
+              <span className="text-sm font-medium text-gray-700">
+                Isticmaal nidaamka dabaqyada (Floor System)
+              </span>
+            </label>
+            <p className="text-xs text-gray-500 mt-1">
+              Haddii aad doorato, waxaad awood u yeelan doontaa inaad u qaybiiso gurigaaga dabaqyo kala duwan oo qiimo kala duwan leh.
+            </p>
+          </div>
+          
+          {/* Total Floors */}
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Tirada dabaqyada: {formData.total_floors}
+            </label>
+            <input
+              type="range"
+              min="1"
+              max="10"
+              value={formData.total_floors}
+              onChange={(e) => handleTotalFloorsChange(parseInt(e.target.value))}
+              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+            />
+            <div className="flex justify-between text-xs text-gray-500 mt-1">
+              <span>1 dabaq</span>
+              <span>10 dabaq</span>
+            </div>
+          </div>
           
           {/* Submit Button */}
           <div className="flex flex-col sm:flex-row justify-end space-y-3 sm:space-y-0 sm:space-x-4 pt-6 border-t border-gray-200">
@@ -1923,9 +1981,200 @@ const EditListing = () => {
             )}
           </div>
 
-          {/* Note: Floor system is handled above in the main floors section */}
+          {/* Floors Section */}
+          <div className="space-y-6 border-4 border-green-500 bg-green-50 p-6 rounded-lg">
+            <div className="flex items-center justify-between border-b border-gray-200 pb-2">
+              <h3 className="text-xl font-bold text-green-800">
+                🏢 Dabaqyada Guriga (FLOOR SYSTEM)
+              </h3>
+              <div className="flex items-center space-x-2">
+                <label className="text-sm font-medium text-gray-700">
+                  Tirada dabaqyada:
+                </label>
+                <select
+                  value={formData.total_floors}
+                  onChange={(e) => handleTotalFloorsChange(e.target.value)}
+                  className="px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                >
+                  {[1,2,3,4,5,6,7,8,9,10].map(num => (
+                    <option key={num} value={num}>{num}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            
+            <div className="space-y-6">
+              {floors.map((floor, index) => (
+                <div key={index} className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <h4 className="font-medium text-gray-800 mb-4">
+                    {getFloorLabel(floor.floor_number)}
+                  </h4>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <svg className="w-4 h-4 inline mr-1 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 21l0-12" />
+                        </svg>
+                        Qolalka Jiifka
+                      </label>
+                      <select
+                        value={floor.bedrooms_on_floor}
+                        onChange={(e) => updateFloor(index, 'bedrooms_on_floor', e.target.value)}
+                        className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        {[1,2,3,4,5,6].map(num => (
+                          <option key={num} value={num}>{num}</option>
+                        ))}
+                      </select>
+              </div>
+              
+              <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <svg className="w-4 h-4 inline mr-1 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10v11M20 10v11" />
+                        </svg>
+                        Musqulaha
+                      </label>
+                      <select
+                        value={floor.bathrooms_on_floor}
+                        onChange={(e) => updateFloor(index, 'bathrooms_on_floor', e.target.value)}
+                        className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        {[1,2,3,4].map(num => (
+                          <option key={num} value={num}>{num}</option>
+                        ))}
+                      </select>
+              </div>
+              
+              <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        💰 Qiimaha bishii ($)
+                      </label>
+                      <input
+                        type="number"
+                        value={floor.price_per_month}
+                        onChange={(e) => updateFloor(index, 'price_per_month', e.target.value)}
+                        className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="100"
+                        min="1"
+                      />
+              </div>
+              </div>
+              
+                  {/* Amenities - Horizontal Row */}
+                  <div className="flex flex-wrap gap-3 mb-4">
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        checked={floor.has_kitchen}
+                        onChange={(e) => updateFloor(index, 'has_kitchen', e.target.checked)}
+                        className="mr-1"
+                      />
+                      <svg className="w-4 h-4 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4" />
+                      </svg>
+                      <label className="text-sm font-medium text-gray-700">Jikada</label>
+                    </div>
+                    
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        checked={floor.has_living_room}
+                        onChange={(e) => updateFloor(index, 'has_living_room', e.target.checked)}
+                        className="mr-1"
+                      />
+                      <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 21l0-12" />
+                      </svg>
+                      <label className="text-sm font-medium text-gray-700">Qolka Fadhiga</label>
+                    </div>
+                    
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        checked={floor.has_master_room}
+                        onChange={(e) => updateFloor(index, 'has_master_room', e.target.checked)}
+                        className="mr-1"
+                      />
+                      <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                      </svg>
+                      <label className="text-sm font-medium text-gray-700">Master Room</label>
+                    </div>
+                  </div>
+                  
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Xaaladda Dabaqda
+            </label>
+                    <select
+                      value={floor.floor_status}
+                      onChange={(e) => updateFloor(index, 'floor_status', e.target.value)}
+                      className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="available">La Kireyn Karaa</option>
+                      <option value="not_available">Lama Heli Karo</option>
+                      <option value="occupied">La Kireeyay</option>
+                      <option value="maintenance">Dayactir</option>
+                    </select>
+                        </div>
+                  
+            <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Faahfaahin Dabaqda
+                </label>
+                    <textarea
+                      value={floor.floor_description}
+                      onChange={(e) => updateFloor(index, 'floor_description', e.target.value)}
+                      rows={2}
+                      className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Faahfaahin dheeraad ah oo ku saabsan dabaqdan..."
+                    />
+                      </div>
+                    </div>
+                  ))}
+            </div>
+          </div>
           
-          {/* Note: Floor system is handled above in the main floors section */}
+          {/* Floor System Toggle */}
+          <div className="mb-6">
+            <label className="flex items-center">
+              <input
+                type="checkbox"
+                checked={formData.has_floor_system}
+                onChange={(e) => setFormData(prev => ({ ...prev, has_floor_system: e.target.checked }))}
+                className="mr-2"
+              />
+              <span className="text-sm font-medium text-gray-700">
+                Isticmaal nidaamka dabaqyada (Floor System)
+              </span>
+            </label>
+            <p className="text-xs text-gray-500 mt-1">
+              Haddii aad doorato, waxaad awood u yeelan doontaa inaad u qaybiiso gurigaaga dabaqyo kala duwan oo qiimo kala duwan leh.
+            </p>
+          </div>
+          
+          {/* Total Floors */}
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Tirada dabaqyada: {formData.total_floors}
+            </label>
+            <input
+              type="range"
+              min="1"
+              max="10"
+              value={formData.total_floors}
+              onChange={(e) => handleTotalFloorsChange(parseInt(e.target.value))}
+              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+            />
+            <div className="flex justify-between text-xs text-gray-500 mt-1">
+              <span>1 dabaq</span>
+              <span>10 dabaq</span>
+            </div>
+          </div>
           
           {/* Submit Button */}
           <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
