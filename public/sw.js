@@ -66,6 +66,12 @@ self.addEventListener('fetch', (event) => {
     return;
   }
   
+  // Skip external resources (Google Fonts, CDNs, etc.) - let them load normally
+  if (url.hostname !== self.location.hostname && 
+      !url.hostname.includes('supabase.co')) {
+    return;
+  }
+  
   // Skip Supabase API calls but ALLOW storage images
   if (url.hostname.includes('supabase.co') && !url.pathname.includes('/storage/v1/object/public/')) {
     return;
@@ -134,7 +140,7 @@ async function handleAssetRequest(request) {
     
     throw new Error('Network response not ok');
   } catch (err) {
-    console.error('Service Worker: Failed to fetch asset', request.url, err);
+    console.error('Service Worker: Failed to fetch asset', request.url, 'Error:', err.message);
     // Return a basic error response for failed assets
     return new Response('', { status: 404 });
   }
@@ -161,6 +167,7 @@ async function handleImageRequest(request) {
     
     throw new Error('Network response not ok');
   } catch (err) {
+    console.log('Service Worker: Image fetch failed for', request.url, '- using placeholder');
     // Fall back to placeholder image
     return caches.match('/images/placeholder-apartment.svg');
   }

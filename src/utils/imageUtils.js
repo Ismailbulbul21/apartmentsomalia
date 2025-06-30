@@ -17,11 +17,13 @@ const MAX_CACHE_SIZE = 1000; // Prevent memory leaks
 export const getImageUrl = (path, options = {}) => {
   // Handle undefined, null, or empty strings
   if (!path || path.trim() === '') {
+    console.log('🖼️ Empty path provided, returning placeholder');
     return '/images/placeholder-apartment.svg';
   }
   
   // If it's already a complete URL (for demo/sample data)
   if (path.startsWith('http://') || path.startsWith('https://')) {
+    console.log('🖼️ Complete URL provided:', path);
     return path;
   }
   
@@ -29,6 +31,7 @@ export const getImageUrl = (path, options = {}) => {
   const cacheKey = `${path}_${JSON.stringify(options)}`;
   const cached = imageUrlCache.get(cacheKey);
   if (cached && (Date.now() - cached.timestamp) < CACHE_DURATION) {
+    console.log('🖼️ Cache hit for:', path);
     return cached.url;
   }
   
@@ -54,8 +57,11 @@ export const getImageUrl = (path, options = {}) => {
     
     // Safety check for empty normalized path after processing
     if (!normalizedPath || normalizedPath === '') {
+      console.warn('🖼️ Normalized path is empty for:', path);
       return '/images/placeholder-apartment.svg';
     }
+    
+    console.log('🖼️ Generating URL for path:', normalizedPath);
     
     const { data } = supabase.storage
       .from('apartment_images')
@@ -63,7 +69,7 @@ export const getImageUrl = (path, options = {}) => {
     
     // Safety check for empty publicUrl
     if (!data || !data.publicUrl) {
-      console.warn('🖼️ Failed to generate public URL for path:', normalizedPath);
+      console.error('🖼️ Failed to generate public URL for path:', normalizedPath);
       return '/images/placeholder-apartment.svg';
     }
     
@@ -84,6 +90,7 @@ export const getImageUrl = (path, options = {}) => {
       timestamp: Date.now()
     });
     
+    console.log('🖼️ Generated URL:', finalUrl);
     return finalUrl;
   } catch (error) {
     console.error('🖼️ Error generating image URL:', error, 'for path:', path);
@@ -176,7 +183,7 @@ export const getImageCacheSize = () => {
 /**
  * Test function to verify image URL generation
  */
-export const testImageUrls = () => {
+export const testImageGeneration = () => {
   const testPaths = [
     'apartments/1010ed08-f109-4050-ab26-e5a31a9050d8-1748111578431-704.jpeg',
     'apartments/5c627b60-0358-4ae4-a991-e04ae7156848-1748105138733-363.jpeg'
@@ -233,5 +240,33 @@ export const testDirectAccess = async () => {
     
   } catch (error) {
     console.error('🧪 Direct access test error:', error);
+  }
+};
+
+/**
+ * Test direct access to image URLs - useful for debugging production issues
+ */
+export const testImageUrls = async () => {
+  const testPaths = [
+    'apartments/1010ed08-f109-4050-ab26-e5a31a9050d8-1748111578431-704.jpeg',
+    'apartments/5c627b60-0358-4ae4-a991-e04ae7156848-1748105138733-363.jpeg'
+  ];
+  
+  console.log('🧪 DEBUG: Testing apartment image URLs directly...');
+  
+  for (const path of testPaths) {
+    const url = getImageUrl(path);
+    console.log(`🧪 Testing: ${path} → ${url}`);
+    
+    try {
+      const response = await fetch(url, { method: 'HEAD' });
+      if (response.ok) {
+        console.log(`✅ DIRECT TEST SUCCESS: ${path}`);
+      } else {
+        console.error(`❌ DIRECT TEST FAILED: ${path} - Status: ${response.status}`);
+      }
+    } catch (error) {
+      console.error(`❌ DIRECT TEST ERROR: ${path} - Error:`, error.message);
+    }
   }
 }; 
