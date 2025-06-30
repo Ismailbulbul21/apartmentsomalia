@@ -364,4 +364,7 @@ _________________________________________________________________________
 
 *This form is property of Somalia Apartments. All information provided will be used for apartment listing purposes only.*
 
-*Foomkani wuxuu ka tirsan yahay Somalia Apartments. Dhammaan macluumaadka la bixiyay waxaa loo isticmaali doonaa ujeeddooyinka liiska guryaha kaliya.* 
+*Foomkani wuxuu ka tirsan yahay Somalia Apartments. Dhammaan macluumaadka la bixiyay waxaa loo isticmaali doonaa ujeeddooyinka liiska guryaha kaliya.* All checks have failed
+1 failing check
+
+Vercel - Deployment failed.
