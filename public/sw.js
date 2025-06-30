@@ -1,9 +1,9 @@
 // Service Worker for Sompartment.com
-// Version 1.0.0
+// Version 1.1.0 - Fixed image loading
 
-const CACHE_NAME = 'sompartment-v1';
-const STATIC_CACHE = 'sompartment-static-v1';
-const DYNAMIC_CACHE = 'sompartment-dynamic-v1';
+const CACHE_NAME = 'sompartment-v1.1';
+const STATIC_CACHE = 'sompartment-static-v1.1';
+const DYNAMIC_CACHE = 'sompartment-dynamic-v1.1';
 
 // Assets to cache immediately
 const STATIC_ASSETS = [
@@ -72,12 +72,13 @@ self.addEventListener('fetch', (event) => {
     return;
   }
   
-  // Skip Supabase API calls but ALLOW storage images
-  if (url.hostname.includes('supabase.co') && !url.pathname.includes('/storage/v1/object/public/')) {
+  // COMPLETELY SKIP ALL SUPABASE REQUESTS - let them load normally
+  if (url.hostname.includes('supabase.co')) {
+    console.log('Service Worker: Bypassing Supabase request:', url.pathname);
     return;
   }
   
-  // Handle different types of requests
+  // Handle different types of requests for same-origin only
   if (request.destination === 'document') {
     // HTML documents - cache with network fallback
     event.respondWith(handleDocumentRequest(request));
@@ -85,8 +86,8 @@ self.addEventListener('fetch', (event) => {
     // JS/CSS files - cache first, then network
     event.respondWith(handleAssetRequest(request));
   } else if (request.destination === 'image') {
-    // Images - cache with fallback
-    event.respondWith(handleImageRequest(request));
+    // Local images only - cache with fallback
+    event.respondWith(handleLocalImageRequest(request));
   } else {
     // Other requests - network first
     event.respondWith(handleOtherRequest(request));
@@ -146,8 +147,8 @@ async function handleAssetRequest(request) {
   }
 }
 
-// Handle image requests
-async function handleImageRequest(request) {
+// Handle LOCAL image requests only (not Supabase)
+async function handleLocalImageRequest(request) {
   try {
     // Try cache first
     const cachedResponse = await caches.match(request);
@@ -167,8 +168,8 @@ async function handleImageRequest(request) {
     
     throw new Error('Network response not ok');
   } catch (err) {
-    console.log('Service Worker: Image fetch failed for', request.url, '- using placeholder');
-    // Fall back to placeholder image
+    console.log('Service Worker: Local image fetch failed for', request.url, '- using placeholder');
+    // Fall back to placeholder image for local images only
     return caches.match('/images/placeholder-apartment.svg');
   }
 }

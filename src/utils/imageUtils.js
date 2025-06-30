@@ -259,14 +259,47 @@ export const testImageUrls = async () => {
     console.log(`🧪 Testing: ${path} → ${url}`);
     
     try {
+      // Test with fetch HEAD request
       const response = await fetch(url, { method: 'HEAD' });
       if (response.ok) {
         console.log(`✅ DIRECT TEST SUCCESS: ${path}`);
+        console.log(`   Status: ${response.status}`);
+        console.log(`   Headers:`, Object.fromEntries(response.headers.entries()));
       } else {
         console.error(`❌ DIRECT TEST FAILED: ${path} - Status: ${response.status}`);
       }
+      
+      // Also test with Image element
+      const testImg = new Image();
+      testImg.crossOrigin = 'anonymous'; // Test CORS
+      testImg.onload = () => {
+        console.log(`✅ IMAGE ELEMENT SUCCESS: ${path}`);
+      };
+      testImg.onerror = (e) => {
+        console.error(`❌ IMAGE ELEMENT FAILED: ${path}`, e);
+      };
+      testImg.src = url;
+      
     } catch (error) {
       console.error(`❌ DIRECT TEST ERROR: ${path} - Error:`, error.message);
     }
+  }
+  
+  // Test Supabase storage directly
+  console.log('🧪 Testing Supabase storage configuration...');
+  try {
+    const { data, error } = await supabase.storage.listBuckets();
+    console.log('🧪 Available buckets:', data);
+    if (error) console.error('🧪 Bucket list error:', error);
+    
+    // Test apartment_images bucket specifically
+    const { data: files, error: filesError } = await supabase.storage
+      .from('apartment_images')
+      .list('apartments', { limit: 5 });
+    console.log('🧪 Files in apartment_images/apartments:', files);
+    if (filesError) console.error('🧪 Files list error:', filesError);
+    
+  } catch (storageError) {
+    console.error('🧪 Storage test error:', storageError);
   }
 }; 
