@@ -6,12 +6,13 @@ import { Link } from 'react-router-dom';
 import { getImageUrl, preloadImages, testImageUrls } from '../utils/imageUtils';
 import { measureAsync } from '../utils/performance';
 
-// Fixed image component for production
+// Production-ready image component with robust state management
 const LazyImage = memo(({ src, alt, className }) => {
   const [isLoaded, setIsLoaded] = useState(false);
   const [error, setError] = useState(false);
   const [imageSrc, setImageSrc] = useState('');
   const [showSpinner, setShowSpinner] = useState(false);
+  const imgRef = useRef(null);
   
   useEffect(() => {
     console.log(`🖼️ LazyImage processing src: ${src}`);
@@ -28,45 +29,72 @@ const LazyImage = memo(({ src, alt, className }) => {
     setIsLoaded(false);
     setError(false);
     setShowSpinner(false);
-    setImageSrc(''); // Clear previous image
     
-    // Process URL immediately
+    // Process URL and preload
     const processedSrc = getImageUrl(src);
     console.log(`🖼️ Processed URL: ${processedSrc}`);
     
-    // Set the processed URL immediately and let the img onLoad handle the loaded state
-    setImageSrc(processedSrc);
+    // Preload the image to ensure it's fully loaded before showing
+    const preloadImg = new Image();
+    
+    const handlePreloadSuccess = () => {
+      console.log(`✅ Image preloaded successfully: ${processedSrc}`);
+      setImageSrc(processedSrc);
+      setIsLoaded(true);
+      setShowSpinner(false);
+      setError(false);
+    };
+    
+    const handlePreloadError = (e) => {
+      console.error(`❌ Failed to preload image: ${processedSrc}`, e);
+      setError(true);
+      setShowSpinner(false);
+      setIsLoaded(false);
+      setImageSrc('/images/placeholder-apartment.svg');
+    };
+    
+    preloadImg.onload = handlePreloadSuccess;
+    preloadImg.onerror = handlePreloadError;
+    preloadImg.src = processedSrc;
     
     // Show spinner after a delay if image hasn't loaded
     const spinnerTimer = setTimeout(() => {
-      setShowSpinner(true);
-    }, 300);
+      if (!isLoaded && !error) {
+        setShowSpinner(true);
+      }
+    }, 500);
     
     return () => {
       clearTimeout(spinnerTimer);
+      preloadImg.onload = null;
+      preloadImg.onerror = null;
     };
   }, [src]);
   
-  const handleImageLoad = () => {
-    console.log(`✅ Image loaded successfully: ${imageSrc}`);
-    setIsLoaded(true);
-    setShowSpinner(false);
-    setError(false);
+  // Fallback handlers for the actual img element
+  const handleImageLoad = (e) => {
+    console.log(`🖼️ DOM image rendered successfully: ${e.target.src}`);
+    if (!isLoaded) {
+      setIsLoaded(true);
+      setShowSpinner(false);
+      setError(false);
+    }
   };
   
   const handleImageError = (e) => {
-    console.error(`❌ Failed to load image: ${imageSrc}`, e);
-    setError(true);
-    setShowSpinner(false);
-    setIsLoaded(false);
-    // Fallback to placeholder
-    setImageSrc('/images/placeholder-apartment.svg');
+    console.error(`🖼️ DOM image failed to render: ${e.target.src}`);
+    if (!error) {
+      setError(true);
+      setShowSpinner(false);
+      setIsLoaded(false);
+      setImageSrc('/images/placeholder-apartment.svg');
+    }
   };
   
   return (
     <div className={`${className} relative overflow-hidden bg-night-800`}>
       {/* Background placeholder - only show when not loaded and no error */}
-      {!isLoaded && !error && imageSrc && (
+      {!isLoaded && !error && (
         <div className="absolute inset-0 bg-gradient-to-br from-night-700 to-night-800 flex items-center justify-center">
           <svg className="w-12 h-12 text-night-600" fill="currentColor" viewBox="0 0 20 20">
             <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
@@ -81,12 +109,13 @@ const LazyImage = memo(({ src, alt, className }) => {
         </div>
       )}
       
-      {/* Actual image */}
+      {/* Actual image - always render when we have a src */}
       {imageSrc && (
         <img 
+          ref={imgRef}
           src={imageSrc}
           alt={alt || "Apartment image"}
-          className={`w-full h-full object-cover transition-opacity duration-300 ${
+          className={`w-full h-full object-cover transition-opacity duration-500 ${
             isLoaded ? 'opacity-100' : 'opacity-0'
           }`}
           onLoad={handleImageLoad}
