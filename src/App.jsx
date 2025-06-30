@@ -141,7 +141,7 @@ const BecomeOwner = lazyWithRetry(() => import('./pages/BecomeOwner'), 'BecomeOw
 const Contact = lazyWithRetry(() => import('./pages/Contact'), 'Contact');
 const NotFound = lazyWithRetry(() => import('./pages/NotFound'), 'NotFound');
 const WriteReview = lazyWithRetry(() => import('./pages/WriteReview'), 'WriteReview');
-const ImageTest = lazyWithRetry(() => import('./components/ImageTest'), 'ImageTest');
+
 
 // Protected route component with improved loading state
 const ProtectedRoute = ({ children, allowedRoles = [] }) => {
@@ -210,7 +210,6 @@ function App() {
                     <Route path="/auth/callback" element={<AuthCallback />} />
                     <Route path="/apartments/:id" element={<ApartmentDetail />} />
                     <Route path="/contact" element={<Contact />} />
-                    <Route path="/test-images" element={<ImageTest />} />
 
                     {/* User routes */}
                     <Route 

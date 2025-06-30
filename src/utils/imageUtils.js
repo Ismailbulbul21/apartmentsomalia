@@ -17,11 +17,13 @@ const MAX_CACHE_SIZE = 1000; // Prevent memory leaks
 export const getImageUrl = (path, options = {}) => {
   // Handle undefined, null, or empty strings
   if (!path || path.trim() === '') {
+    console.log('🖼️ Empty path provided, returning placeholder');
     return '/images/placeholder-apartment.svg';
   }
   
   // If it's already a complete URL (for demo/sample data)
   if (path.startsWith('http://') || path.startsWith('https://')) {
+    console.log('🖼️ Complete URL provided:', path);
     return path;
   }
   
@@ -29,6 +31,7 @@ export const getImageUrl = (path, options = {}) => {
   const cacheKey = `${path}_${JSON.stringify(options)}`;
   const cached = imageUrlCache.get(cacheKey);
   if (cached && (Date.now() - cached.timestamp) < CACHE_DURATION) {
+    console.log('🖼️ Returning cached URL for:', path);
     return cached.url;
   }
   
@@ -44,9 +47,12 @@ export const getImageUrl = (path, options = {}) => {
     // Handle different path formats
     let normalizedPath = path.trim();
     
+    console.log('🖼️ Processing path:', normalizedPath);
+    
     // Remove any leading slashes
     if (normalizedPath.startsWith('/')) {
       normalizedPath = normalizedPath.substring(1);
+      console.log('🖼️ Removed leading slash:', normalizedPath);
     }
     
     // The paths in database are like "apartments/filename.jpeg"
@@ -54,8 +60,12 @@ export const getImageUrl = (path, options = {}) => {
     
     // Safety check for empty normalized path after processing
     if (!normalizedPath || normalizedPath === '') {
+      console.warn('🖼️ Empty normalized path, returning placeholder');
       return '/images/placeholder-apartment.svg';
     }
+    
+    // Generate public URL
+    console.log('🖼️ Generating public URL for bucket: apartment_images, path:', normalizedPath);
     
     const { data } = supabase.storage
       .from('apartment_images')
@@ -68,6 +78,7 @@ export const getImageUrl = (path, options = {}) => {
     }
     
     let finalUrl = data.publicUrl;
+    console.log('🖼️ Generated public URL:', finalUrl);
     
     // Add optimization parameters if supported (Supabase doesn't support transform yet, but ready for future)
     if (options.width || options.height || options.quality) {
@@ -76,6 +87,7 @@ export const getImageUrl = (path, options = {}) => {
       if (options.height) urlObj.searchParams.set('height', options.height);
       if (options.quality) urlObj.searchParams.set('quality', options.quality);
       finalUrl = urlObj.toString();
+      console.log('🖼️ Added optimization parameters:', finalUrl);
     }
     
     // Cache the result
@@ -84,6 +96,7 @@ export const getImageUrl = (path, options = {}) => {
       timestamp: Date.now()
     });
     
+    console.log('🖼️ Successfully generated and cached URL for:', path);
     return finalUrl;
   } catch (error) {
     console.error('🖼️ Error generating image URL:', error, 'for path:', path);
@@ -221,6 +234,12 @@ export const testDirectAccess = async () => {
       const response = await fetch(urlData.publicUrl);
       console.log('🧪 Fetch response status:', response.status);
       console.log('🧪 Fetch response headers:', Object.fromEntries(response.headers.entries()));
+      
+      if (response.ok) {
+        console.log('✅ Image URL is working correctly!');
+      } else {
+        console.error('❌ Image URL returned error status:', response.status);
+      }
     } catch (fetchError) {
       console.error('🧪 Fetch error:', fetchError);
     }
@@ -228,4 +247,33 @@ export const testDirectAccess = async () => {
   } catch (error) {
     console.error('🧪 Direct access test error:', error);
   }
+};
+
+/**
+ * Quick test to verify if Supabase storage URLs are working
+ */
+export const testSupabaseImageUrls = () => {
+  console.log('🧪 Testing Supabase image URL generation...');
+  
+  const testPaths = [
+    'apartments/1010ed08-f109-4050-ab26-e5a31a9050d8-1748111578431-704.jpeg',
+    'apartments/5c627b60-0358-4ae4-a991-e04ae7156848-1748105138733-363.jpeg'
+  ];
+  
+  testPaths.forEach(path => {
+    const url = getImageUrl(path);
+    console.log(`🧪 Path: ${path}`);
+    console.log(`🧪 Generated URL: ${url}`);
+    
+    // Test if URL is accessible
+    const img = new Image();
+    img.onload = () => {
+      console.log(`✅ Image loaded successfully: ${path}`);
+      console.log(`   Dimensions: ${img.naturalWidth}x${img.naturalHeight}`);
+    };
+    img.onerror = (error) => {
+      console.error(`❌ Image failed to load: ${path}`, error);
+    };
+    img.src = url;
+  });
 }; 

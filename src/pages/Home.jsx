@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../lib/supabase';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { Link } from 'react-router-dom';
-import { getImageUrl, preloadImages, testImageUrls, testSupabaseImageUrls } from '../utils/imageUtils';
+import { getImageUrl, preloadImages } from '../utils/imageUtils';
 import { measureAsync } from '../utils/performance';
 
 // ULTRA-SIMPLE Image component - No complex state management
@@ -397,12 +397,6 @@ export default function Home() {
 
   // Fetch apartments on component mount and when filters change
   useEffect(() => {
-    // Run image URL tests on initial load for debugging
-    if (apartments.length === 0) {
-      console.log('🧪 Running image URL tests...');
-      testSupabaseImageUrls();
-    }
-    
     // Immediate fetch on component mount
     if (selectedDistrict) {
       fetchApartments();

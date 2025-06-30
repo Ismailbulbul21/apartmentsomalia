@@ -1,5 +1,5 @@
 // Service Worker for Sompartment.com
-// Version 1.0.0
+// Version 1.0.1 - Fixed Supabase storage image handling
 
 const CACHE_NAME = 'sompartment-v1';
 const STATIC_CACHE = 'sompartment-static-v1';
@@ -66,9 +66,11 @@ self.addEventListener('fetch', (event) => {
     return;
   }
   
-  // Skip Supabase API calls but ALLOW storage images
-  if (url.hostname.includes('supabase.co') && !url.pathname.includes('/storage/v1/object/public/')) {
-    return;
+  // IMPROVED: Skip ALL Supabase requests to let them handle themselves
+  // This includes storage images, API calls, etc.
+  if (url.hostname.includes('supabase.co')) {
+    console.log('🔄 Service Worker: Bypassing Supabase request:', request.url);
+    return; // Let the request go through normally without service worker interference
   }
   
   // Handle different types of requests
@@ -79,7 +81,7 @@ self.addEventListener('fetch', (event) => {
     // JS/CSS files - cache first, then network
     event.respondWith(handleAssetRequest(request));
   } else if (request.destination === 'image') {
-    // Images - cache with fallback
+    // Images - cache with fallback (but not for Supabase images)
     event.respondWith(handleImageRequest(request));
   } else {
     // Other requests - network first
@@ -142,26 +144,38 @@ async function handleAssetRequest(request) {
 
 // Handle image requests
 async function handleImageRequest(request) {
+  const url = new URL(request.url);
+  
+  // IMPROVED: Don't handle Supabase images at all in service worker
+  if (url.hostname.includes('supabase.co')) {
+    console.log('🖼️ Service Worker: Bypassing Supabase image request:', request.url);
+    return fetch(request); // Let it go through normally
+  }
+  
   try {
-    // Try cache first
+    // Try cache first for non-Supabase images
     const cachedResponse = await caches.match(request);
     if (cachedResponse) {
+      console.log('🖼️ Service Worker: Serving cached image:', request.url);
       return cachedResponse;
     }
     
     // If not in cache, fetch from network
+    console.log('🖼️ Service Worker: Fetching image from network:', request.url);
     const networkResponse = await fetch(request);
     
     if (networkResponse && networkResponse.status === 200) {
       // Cache the response
       const cache = await caches.open(DYNAMIC_CACHE);
       cache.put(request, networkResponse.clone());
+      console.log('🖼️ Service Worker: Cached image:', request.url);
       return networkResponse;
     }
     
     throw new Error('Network response not ok');
   } catch (err) {
-    // Fall back to placeholder image
+    console.error('🖼️ Service Worker: Image request failed:', request.url, err);
+    // Fall back to placeholder image only for non-Supabase images
     return caches.match('/images/placeholder-apartment.svg');
   }
 }
