@@ -6,11 +6,11 @@ import { Link } from 'react-router-dom';
 import { getImageUrl, preloadImages, testImageUrls } from '../utils/imageUtils';
 import { measureAsync } from '../utils/performance';
 
-// Fast-loading image component with optimization
+// Fixed image component for production
 const LazyImage = memo(({ src, alt, className }) => {
   const [isLoaded, setIsLoaded] = useState(false);
   const [error, setError] = useState(false);
-  const [imageSrc, setImageSrc] = useState('/images/placeholder-apartment.svg');
+  const [imageSrc, setImageSrc] = useState('');
   const [showSpinner, setShowSpinner] = useState(false);
   
   useEffect(() => {
@@ -28,48 +28,45 @@ const LazyImage = memo(({ src, alt, className }) => {
     setIsLoaded(false);
     setError(false);
     setShowSpinner(false);
+    setImageSrc(''); // Clear previous image
     
-    // Show spinner only after a short delay to avoid flashing
-    const spinnerTimer = setTimeout(() => {
-      if (!isLoaded && !error) {
-        setShowSpinner(true);
-      }
-    }, 200);
-    
-    // Process URL and start loading immediately
+    // Process URL immediately
     const processedSrc = getImageUrl(src);
     console.log(`🖼️ Processed URL: ${processedSrc}`);
     
-    // Preload the image
-    const img = new Image();
-    img.onload = () => {
-      console.log(`✅ Image loaded successfully: ${processedSrc}`);
-      clearTimeout(spinnerTimer);
-      setImageSrc(processedSrc);
-      setIsLoaded(true);
-      setShowSpinner(false);
-      setError(false);
-    };
-    img.onerror = (e) => {
-      console.error(`❌ Failed to load image: ${processedSrc}`, e);
-      clearTimeout(spinnerTimer);
-      setError(true);
-      setShowSpinner(false);
-      setIsLoaded(false);
-    };
-    img.src = processedSrc;
+    // Set the processed URL immediately and let the img onLoad handle the loaded state
+    setImageSrc(processedSrc);
+    
+    // Show spinner after a delay if image hasn't loaded
+    const spinnerTimer = setTimeout(() => {
+      setShowSpinner(true);
+    }, 300);
     
     return () => {
       clearTimeout(spinnerTimer);
-      img.onload = null;
-      img.onerror = null;
     };
   }, [src]);
+  
+  const handleImageLoad = () => {
+    console.log(`✅ Image loaded successfully: ${imageSrc}`);
+    setIsLoaded(true);
+    setShowSpinner(false);
+    setError(false);
+  };
+  
+  const handleImageError = (e) => {
+    console.error(`❌ Failed to load image: ${imageSrc}`, e);
+    setError(true);
+    setShowSpinner(false);
+    setIsLoaded(false);
+    // Fallback to placeholder
+    setImageSrc('/images/placeholder-apartment.svg');
+  };
   
   return (
     <div className={`${className} relative overflow-hidden bg-night-800`}>
       {/* Background placeholder - only show when not loaded and no error */}
-      {!isLoaded && !error && (
+      {!isLoaded && !error && imageSrc && (
         <div className="absolute inset-0 bg-gradient-to-br from-night-700 to-night-800 flex items-center justify-center">
           <svg className="w-12 h-12 text-night-600" fill="currentColor" viewBox="0 0 20 20">
             <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
@@ -84,22 +81,20 @@ const LazyImage = memo(({ src, alt, className }) => {
         </div>
       )}
       
-      {/* Actual image - always render but control visibility */}
-      <img 
-        src={imageSrc}
-        alt={alt || "Apartment image"}
-        className={`w-full h-full object-cover transition-opacity duration-300 ${
-          isLoaded && !error ? 'opacity-100' : 'opacity-0'
-        }`}
-        onLoad={() => {
-          console.log(`🖼️ DOM image rendered: ${imageSrc}`);
-        }}
-        onError={(e) => {
-          console.error(`🖼️ DOM image failed to render: ${imageSrc}`, e);
-        }}
-        loading="lazy"
-        decoding="async"
-      />
+      {/* Actual image */}
+      {imageSrc && (
+        <img 
+          src={imageSrc}
+          alt={alt || "Apartment image"}
+          className={`w-full h-full object-cover transition-opacity duration-300 ${
+            isLoaded ? 'opacity-100' : 'opacity-0'
+          }`}
+          onLoad={handleImageLoad}
+          onError={handleImageError}
+          loading="lazy"
+          decoding="async"
+        />
+      )}
       
       {/* Error state overlay */}
       {error && (

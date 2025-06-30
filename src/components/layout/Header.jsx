@@ -604,7 +604,11 @@ const ProfileButton = memo(({ user, userProfile, userRole, isAdminUser, isOwner,
               src={effectiveProfile.avatar_url}
               alt={effectiveProfile?.full_name || 'User'}
               className="w-8 h-8 rounded-full object-cover"
-              onError={refreshImageOnError}
+              onLoad={() => console.log('✅ Profile image loaded:', effectiveProfile.avatar_url)}
+              onError={(e) => {
+                console.error('❌ Profile image failed to load:', effectiveProfile.avatar_url);
+                refreshImageOnError(e);
+              }}
             />
           ) : (
             <div className="w-8 h-8 rounded-full bg-primary-500 flex items-center justify-center text-white font-semibold">
