@@ -3,15 +3,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../lib/supabase';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { Link } from 'react-router-dom';
-import { getImageUrl, preloadImages, testImageUrls } from '../utils/imageUtils';
+import { getImageUrl, preloadImages, testImageUrls, testSupabaseImageUrls } from '../utils/imageUtils';
 import { measureAsync } from '../utils/performance';
 
-// Fast-loading image component with optimization
+// ULTRA-SIMPLE Image component - No complex state management
 const LazyImage = memo(({ src, alt, className }) => {
-  const [isLoaded, setIsLoaded] = useState(false);
-  const [error, setError] = useState(false);
   const [imageSrc, setImageSrc] = useState('/images/placeholder-apartment.svg');
-  const [showSpinner, setShowSpinner] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(false);
   
   useEffect(() => {
     if (!src || src.trim() === '') {
@@ -20,70 +18,52 @@ const LazyImage = memo(({ src, alt, className }) => {
       return;
     }
     
-    // Show spinner only after a short delay to avoid flashing
-    const spinnerTimer = setTimeout(() => setShowSpinner(true), 200);
-    
-    // Process URL and start loading immediately
     const processedSrc = getImageUrl(src);
+    console.log('🖼️ LazyImage processing:', src, '→', processedSrc);
     
-    // Preload the image
-    const img = new Image();
-    img.onload = () => {
-      clearTimeout(spinnerTimer);
-      setImageSrc(processedSrc);
-    setIsLoaded(true);
-      setShowSpinner(false);
-  };
-    img.onerror = () => {
-      clearTimeout(spinnerTimer);
-    setError(true);
-      setShowSpinner(false);
+    // Set the image source immediately
+    setImageSrc(processedSrc);
+    setIsLoaded(false);
+    
+    // Create a test image to verify it loads
+    const testImg = new Image();
+    testImg.onload = () => {
+      console.log('✅ LazyImage loaded successfully:', src);
+      setIsLoaded(true);
     };
-    img.src = processedSrc;
-    
-    return () => clearTimeout(spinnerTimer);
+    testImg.onerror = () => {
+      console.error('❌ LazyImage failed to load:', src);
+      setImageSrc('/images/placeholder-apartment.svg');
+      setIsLoaded(true);
+    };
+    testImg.src = processedSrc;
   }, [src]);
   
   return (
     <div className={`${className} relative overflow-hidden bg-night-800`}>
-      {/* Background placeholder - always visible */}
-      <div className="absolute inset-0 bg-gradient-to-br from-night-700 to-night-800 flex items-center justify-center">
+      {/* Background placeholder - behind the image */}
+      <div className="absolute inset-0 bg-gradient-to-br from-night-700 to-night-800 flex items-center justify-center z-0">
         <svg className="w-12 h-12 text-night-600" fill="currentColor" viewBox="0 0 20 20">
           <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
         </svg>
-        </div>
+      </div>
       
-      {/* Loading spinner - only show after delay */}
-      {showSpinner && !isLoaded && !error && (
-        <div className="absolute inset-0 flex items-center justify-center bg-night-800/80">
-          <div className="w-6 h-6 border-2 border-primary-300 border-t-primary-600 rounded-full animate-spin"></div>
-        </div>
-      )}
-      
-      {/* Actual image */}
+      {/* Actual image - ALWAYS visible, above background */}
       <img 
         src={imageSrc}
         alt={alt || "Apartment image"}
-        className={`w-full h-full object-cover transition-opacity duration-300 ${
-          isLoaded ? 'opacity-100' : 'opacity-0'
-        }`}
-        onLoad={() => setIsLoaded(true)}
-        onError={() => setError(true)}
+        className="w-full h-full object-cover relative z-10"
         loading="lazy"
         decoding="async"
+        onLoad={() => {
+          console.log('🖼️ IMG element loaded:', src);
+          setIsLoaded(true);
+        }}
+        onError={() => {
+          console.error('🖼️ IMG element failed:', src);
+          setImageSrc('/images/placeholder-apartment.svg');
+        }}
       />
-      
-      {/* Error state overlay */}
-      {error && (
-        <div className="absolute inset-0 flex items-center justify-center bg-night-800/90">
-          <div className="text-center text-night-400">
-            <svg className="w-8 h-8 mx-auto mb-2" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-            </svg>
-            <span className="text-xs">Image unavailable</span>
-          </div>
-        </div>
-      )}
     </div>
   );
 });
@@ -417,6 +397,12 @@ export default function Home() {
 
   // Fetch apartments on component mount and when filters change
   useEffect(() => {
+    // Run image URL tests on initial load for debugging
+    if (apartments.length === 0) {
+      console.log('🧪 Running image URL tests...');
+      testSupabaseImageUrls();
+    }
+    
     // Immediate fetch on component mount
     if (selectedDistrict) {
       fetchApartments();
