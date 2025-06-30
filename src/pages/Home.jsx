@@ -6,12 +6,11 @@ import { Link } from 'react-router-dom';
 import { getImageUrl, preloadImages, testImageUrls } from '../utils/imageUtils';
 import { measureAsync } from '../utils/performance';
 
-// Production-ready image component with robust state management
+// Simplified production-ready image component
 const LazyImage = memo(({ src, alt, className }) => {
   const [isLoaded, setIsLoaded] = useState(false);
   const [error, setError] = useState(false);
   const [imageSrc, setImageSrc] = useState('');
-  const [showSpinner, setShowSpinner] = useState(false);
   const imgRef = useRef(null);
   
   useEffect(() => {
@@ -28,96 +27,41 @@ const LazyImage = memo(({ src, alt, className }) => {
     // Reset states for new image
     setIsLoaded(false);
     setError(false);
-    setShowSpinner(false);
     
-    // Process URL and preload
+    // Process URL and set immediately - let browser handle loading
     const processedSrc = getImageUrl(src);
     console.log(`🖼️ Processed URL: ${processedSrc}`);
+    setImageSrc(processedSrc);
     
-    // Preload the image to ensure it's fully loaded before showing
-    const preloadImg = new Image();
-    
-    const handlePreloadSuccess = () => {
-      console.log(`✅ Image preloaded successfully: ${processedSrc}`);
-      setImageSrc(processedSrc);
-      setIsLoaded(true);
-      setShowSpinner(false);
-      setError(false);
-    };
-    
-    const handlePreloadError = (e) => {
-      console.error(`❌ Failed to preload image: ${processedSrc}`, e);
-      setError(true);
-      setShowSpinner(false);
-      setIsLoaded(false);
-      setImageSrc('/images/placeholder-apartment.svg');
-    };
-    
-    preloadImg.onload = handlePreloadSuccess;
-    preloadImg.onerror = handlePreloadError;
-    preloadImg.src = processedSrc;
-    
-    // Show spinner after a delay if image hasn't loaded
-    const spinnerTimer = setTimeout(() => {
-      if (!isLoaded && !error) {
-        setShowSpinner(true);
-      }
-    }, 500);
-    
-    return () => {
-      clearTimeout(spinnerTimer);
-      preloadImg.onload = null;
-      preloadImg.onerror = null;
-    };
   }, [src]);
   
-  // Fallback handlers for the actual img element
+  // Direct handlers for the img element
   const handleImageLoad = (e) => {
-    console.log(`🖼️ DOM image rendered successfully: ${e.target.src}`);
-    if (!isLoaded) {
-      setIsLoaded(true);
-      setShowSpinner(false);
-      setError(false);
-    }
+    console.log(`🖼️ DOM image loaded: ${e.target.src}`);
+    setIsLoaded(true);
+    setError(false);
   };
   
   const handleImageError = (e) => {
-    console.error(`🖼️ DOM image failed to render: ${e.target.src}`);
-    if (!error) {
-      setError(true);
-      setShowSpinner(false);
-      setIsLoaded(false);
-      setImageSrc('/images/placeholder-apartment.svg');
-    }
+    console.error(`🖼️ DOM image error: ${e.target.src}`);
+    setError(true);
+    setIsLoaded(false);
+    // Don't change src on error - let placeholder overlay show
   };
   
   return (
     <div className={`${className} relative overflow-hidden bg-night-800`}>
-      {/* Background placeholder - only show when not loaded and no error */}
-      {!isLoaded && !error && (
-        <div className="absolute inset-0 bg-gradient-to-br from-night-700 to-night-800 flex items-center justify-center">
-          <svg className="w-12 h-12 text-night-600" fill="currentColor" viewBox="0 0 20 20">
-            <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
-          </svg>
-        </div>
-      )}
-      
-      {/* Loading spinner - only show after delay */}
-      {showSpinner && !isLoaded && !error && (
-        <div className="absolute inset-0 flex items-center justify-center bg-night-800/80">
-          <div className="w-6 h-6 border-2 border-primary-300 border-t-primary-600 rounded-full animate-spin"></div>
-        </div>
-      )}
-      
-      {/* Actual image - always render when we have a src */}
+      {/* Actual image - render immediately when we have src */}
       {imageSrc && (
         <img 
           ref={imgRef}
           src={imageSrc}
           alt={alt || "Apartment image"}
-          className={`w-full h-full object-cover transition-opacity duration-500 ${
-            isLoaded ? 'opacity-100' : 'opacity-0'
-          }`}
+          className="w-full h-full object-cover"
+          style={{
+            opacity: isLoaded ? 1 : 0,
+            transition: 'opacity 0.3s ease-in-out'
+          }}
           onLoad={handleImageLoad}
           onError={handleImageError}
           loading="lazy"
@@ -125,15 +69,21 @@ const LazyImage = memo(({ src, alt, className }) => {
         />
       )}
       
-      {/* Error state overlay */}
-      {error && (
-        <div className="absolute inset-0 flex items-center justify-center bg-night-800/90">
-          <div className="text-center text-night-400">
-            <svg className="w-8 h-8 mx-auto mb-2" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+      {/* Background placeholder - show when not loaded or error */}
+      {(!isLoaded || error) && (
+        <div className="absolute inset-0 bg-gradient-to-br from-night-700 to-night-800 flex items-center justify-center">
+          {error ? (
+            <div className="text-center text-night-400">
+              <svg className="w-8 h-8 mx-auto mb-2" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+              <span className="text-xs">Image unavailable</span>
+            </div>
+          ) : (
+            <svg className="w-12 h-12 text-night-600" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
             </svg>
-            <span className="text-xs">Image unavailable</span>
-          </div>
+          )}
         </div>
       )}
     </div>
@@ -312,6 +262,30 @@ export default function Home() {
   const [apartments, setApartments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  
+  // Debug: Test image URLs on component mount (now runs in production too)
+  useEffect(() => {
+    console.log('🧪 DEBUG: Testing apartment image URLs directly...');
+    const testUrls = [
+      'apartments/1010ed08-f109-4050-ab26-e5a31a9050d8-1748111578431-704.jpeg',
+      'apartments/5c627b60-0358-4ae4-a991-e04ae7156848-1748105138733-363.jpeg'
+    ];
+    
+    testUrls.forEach(path => {
+      const url = getImageUrl(path);
+      console.log(`🧪 Testing: ${path} → ${url}`);
+      
+      // Create a test image element
+      const testImg = new Image();
+      testImg.onload = () => {
+        console.log(`✅ DIRECT TEST SUCCESS: ${path}`);
+      };
+      testImg.onerror = (e) => {
+        console.error(`❌ DIRECT TEST FAILED: ${path}`, e);
+      };
+      testImg.src = url;
+    });
+  }, []);
   
 
   

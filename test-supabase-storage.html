@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Supabase Storage Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; background: #1a1a1a; color: white; }
+        .test-container { margin: 20px 0; padding: 20px; border: 1px solid #333; border-radius: 8px; }
+        .success { border-color: #4ade80; background: rgba(74, 222, 128, 0.1); }
+        .error { border-color: #f87171; background: rgba(248, 113, 113, 0.1); }
+        .loading { border-color: #60a5fa; background: rgba(96, 165, 250, 0.1); }
+        img { max-width: 300px; height: 200px; object-fit: cover; margin: 10px 0; }
+        .url { word-break: break-all; font-family: monospace; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Supabase Storage Access Test</h1>
+    <p>Testing direct access to apartment images...</p>
+    
+    <div id="results"></div>
+    
+    <script>
+        const testUrls = [
+            {
+                path: 'apartments/1010ed08-f109-4050-ab26-e5a31a9050d8-1748111578431-704.jpeg',
+                title: 'Yusra Apartments Primary Image'
+            },
+            {
+                path: 'apartments/5c627b60-0358-4ae4-a991-e04ae7156848-1748105138733-363.jpeg',
+                title: 'Amiira Apartments Primary Image'
+            }
+        ];
+        
+        const baseUrl = 'https://evkttwkermhcyizywzpe.supabase.co/storage/v1/object/public/apartment_images/';
+        
+        function createTestContainer(test) {
+            const container = document.createElement('div');
+            container.className = 'test-container loading';
+            container.innerHTML = `
+                <h3>${test.title}</h3>
+                <p><strong>Path:</strong> ${test.path}</p>
+                <p><strong>Full URL:</strong> <span class="url">${baseUrl + test.path}</span></p>
+                <div id="status-${test.path}">🔄 Testing...</div>
+                <div id="image-${test.path}"></div>
+            `;
+            return container;
+        }
+        
+        function testImage(test) {
+            const container = createTestContainer(test);
+            document.getElementById('results').appendChild(container);
+            
+            const fullUrl = baseUrl + test.path;
+            const img = new Image();
+            
+            img.onload = function() {
+                console.log(`✅ SUCCESS: ${test.path}`);
+                container.className = 'test-container success';
+                document.getElementById(`status-${test.path}`).innerHTML = '✅ Image loaded successfully!';
+                
+                const imgElement = document.createElement('img');
+                imgElement.src = fullUrl;
+                imgElement.alt = test.title;
+                document.getElementById(`image-${test.path}`).appendChild(imgElement);
+            };
+            
+            img.onerror = function(e) {
+                console.error(`❌ FAILED: ${test.path}`, e);
+                container.className = 'test-container error';
+                document.getElementById(`status-${test.path}`).innerHTML = '❌ Failed to load image';
+                
+                // Try to get more details about the error
+                fetch(fullUrl, { method: 'HEAD' })
+                    .then(response => {
+                        document.getElementById(`status-${test.path}`).innerHTML += 
+                            `<br><strong>HTTP Status:</strong> ${response.status} ${response.statusText}`;
+                    })
+                    .catch(fetchError => {
+                        document.getElementById(`status-${test.path}`).innerHTML += 
+                            `<br><strong>Fetch Error:</strong> ${fetchError.message}`;
+                    });
+            };
+            
+            img.src = fullUrl;
+        }
+        
+        // Test all URLs
+        testUrls.forEach(testImage);
+        
+        // Also test bucket access
+        const bucketTestContainer = document.createElement('div');
+        bucketTestContainer.className = 'test-container loading';
+        bucketTestContainer.innerHTML = `
+            <h3>🪣 Bucket Access Test</h3>
+            <p><strong>Bucket URL:</strong> <span class="url">${baseUrl}</span></p>
+            <div id="bucket-status">🔄 Testing bucket access...</div>
+        `;
+        document.getElementById('results').appendChild(bucketTestContainer);
+        
+        fetch(baseUrl, { method: 'HEAD' })
+            .then(response => {
+                if (response.ok) {
+                    bucketTestContainer.className = 'test-container success';
+                    document.getElementById('bucket-status').innerHTML = '✅ Bucket is accessible!';
+                } else {
+                    bucketTestContainer.className = 'test-container error';
+                    document.getElementById('bucket-status').innerHTML = `❌ Bucket access failed: ${response.status} ${response.statusText}`;
+                }
+            })
+            .catch(error => {
+                bucketTestContainer.className = 'test-container error';
+                document.getElementById('bucket-status').innerHTML = `❌ Bucket access error: ${error.message}`;
+            });
+    </script>
+</body>
+</html> 
