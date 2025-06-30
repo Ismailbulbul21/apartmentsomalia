@@ -3,7 +3,6 @@ import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
 import './index.css'
 
-// Re-enable service worker with fixed version that bypasses Supabase
 // Register service worker for better caching and offline support
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {

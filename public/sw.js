@@ -1,9 +1,9 @@
 // Service Worker for Sompartment.com
-// Version 1.1.0 - Fixed image loading
+// Version 1.0.0
 
-const CACHE_NAME = 'sompartment-v1.1';
-const STATIC_CACHE = 'sompartment-static-v1.1';
-const DYNAMIC_CACHE = 'sompartment-dynamic-v1.1';
+const CACHE_NAME = 'sompartment-v1';
+const STATIC_CACHE = 'sompartment-static-v1';
+const DYNAMIC_CACHE = 'sompartment-dynamic-v1';
 
 // Assets to cache immediately
 const STATIC_ASSETS = [
@@ -66,19 +66,12 @@ self.addEventListener('fetch', (event) => {
     return;
   }
   
-  // Skip external resources (Google Fonts, CDNs, etc.) - let them load normally
-  if (url.hostname !== self.location.hostname && 
-      !url.hostname.includes('supabase.co')) {
+  // Skip Supabase API calls but ALLOW storage images
+  if (url.hostname.includes('supabase.co') && !url.pathname.includes('/storage/v1/object/public/')) {
     return;
   }
   
-  // COMPLETELY SKIP ALL SUPABASE REQUESTS - let them load normally
-  if (url.hostname.includes('supabase.co')) {
-    console.log('Service Worker: Bypassing Supabase request:', url.pathname);
-    return;
-  }
-  
-  // Handle different types of requests for same-origin only
+  // Handle different types of requests
   if (request.destination === 'document') {
     // HTML documents - cache with network fallback
     event.respondWith(handleDocumentRequest(request));
@@ -86,8 +79,8 @@ self.addEventListener('fetch', (event) => {
     // JS/CSS files - cache first, then network
     event.respondWith(handleAssetRequest(request));
   } else if (request.destination === 'image') {
-    // Local images only - cache with fallback
-    event.respondWith(handleLocalImageRequest(request));
+    // Images - cache with fallback
+    event.respondWith(handleImageRequest(request));
   } else {
     // Other requests - network first
     event.respondWith(handleOtherRequest(request));
@@ -141,14 +134,14 @@ async function handleAssetRequest(request) {
     
     throw new Error('Network response not ok');
   } catch (err) {
-    console.error('Service Worker: Failed to fetch asset', request.url, 'Error:', err.message);
+    console.error('Service Worker: Failed to fetch asset', request.url, err);
     // Return a basic error response for failed assets
     return new Response('', { status: 404 });
   }
 }
 
-// Handle LOCAL image requests only (not Supabase)
-async function handleLocalImageRequest(request) {
+// Handle image requests
+async function handleImageRequest(request) {
   try {
     // Try cache first
     const cachedResponse = await caches.match(request);
@@ -168,8 +161,7 @@ async function handleLocalImageRequest(request) {
     
     throw new Error('Network response not ok');
   } catch (err) {
-    console.log('Service Worker: Local image fetch failed for', request.url, '- using placeholder');
-    // Fall back to placeholder image for local images only
+    // Fall back to placeholder image
     return caches.match('/images/placeholder-apartment.svg');
   }
 }

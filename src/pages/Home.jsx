@@ -80,20 +80,10 @@ const LazyImage = memo(({ src, alt, className }) => {
               <span className="text-xs">Image unavailable</span>
             </div>
           ) : (
-            <div className="text-center text-night-400">
-              <svg className="w-8 h-8 mx-auto mb-2 animate-pulse" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
-              </svg>
-              <span className="text-xs">Loading...</span>
-            </div>
+            <svg className="w-12 h-12 text-night-600" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
+            </svg>
           )}
-        </div>
-      )}
-      
-      {/* Debug info - show in development */}
-      {(process.env.NODE_ENV === 'development' || window.location.hostname === 'www.sompartment.com') && (
-        <div className="absolute top-1 left-1 bg-black bg-opacity-75 text-white text-xs px-1 rounded">
-          {isLoaded ? '✅' : error ? '❌' : '⏳'}
         </div>
       )}
     </div>
@@ -276,12 +266,26 @@ export default function Home() {
   // Debug: Test image URLs on component mount (now runs in production too)
   useEffect(() => {
     console.log('🧪 DEBUG: Testing apartment image URLs directly...');
+    const testUrls = [
+      'apartments/1010ed08-f109-4050-ab26-e5a31a9050d8-1748111578431-704.jpeg',
+      'apartments/5c627b60-0358-4ae4-a991-e04ae7156848-1748105138733-363.jpeg'
+    ];
     
-    // Test direct image access
-    testImageUrls().catch(console.error);
-    
-    fetchApartments();
-  }, [selectedDistrict]);
+    testUrls.forEach(path => {
+      const url = getImageUrl(path);
+      console.log(`🧪 Testing: ${path} → ${url}`);
+      
+      // Create a test image element
+      const testImg = new Image();
+      testImg.onload = () => {
+        console.log(`✅ DIRECT TEST SUCCESS: ${path}`);
+      };
+      testImg.onerror = (e) => {
+        console.error(`❌ DIRECT TEST FAILED: ${path}`, e);
+      };
+      testImg.src = url;
+    });
+  }, []);
   
 
   
@@ -821,37 +825,6 @@ export default function Home() {
                   ${apartments.length > 0 ? Math.min(...apartments.map(apt => apt.price_per_month)) : 0}+
                 </div>
                 <div className="text-gray-300 text-xs">Qiimaha Ugu Yar</div>
-              </div>
-            </div>
-          </div>
-        </section>
-      )}
-      
-      {/* Temporary Image Test Section - Remove after fixing */}
-      {(process.env.NODE_ENV === 'development' || window.location.hostname === 'www.sompartment.com') && (
-        <section className="py-8 bg-red-900/20 border border-red-700">
-          <div className="container mx-auto px-4">
-            <h3 className="text-white text-lg font-bold mb-4">🔍 Image Debug Test</h3>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-gray-800 p-4 rounded">
-                <h4 className="text-white text-sm font-bold mb-2">Direct Image Test 1</h4>
-                <img 
-                  src="https://evkttwkermhcyizywzpe.supabase.co/storage/v1/object/public/apartment_images/apartments/1010ed08-f109-4050-ab26-e5a31a9050d8-1748111578431-704.jpeg"
-                  alt="Test 1"
-                  className="w-full h-32 object-cover rounded"
-                  onLoad={() => console.log('✅ Direct test 1 loaded')}
-                  onError={() => console.log('❌ Direct test 1 failed')}
-                />
-              </div>
-              <div className="bg-gray-800 p-4 rounded">
-                <h4 className="text-white text-sm font-bold mb-2">Direct Image Test 2</h4>
-                <img 
-                  src="https://evkttwkermhcyizywzpe.supabase.co/storage/v1/object/public/apartment_images/apartments/5c627b60-0358-4ae4-a991-e04ae7156848-1748105138733-363.jpeg"
-                  alt="Test 2"
-                  className="w-full h-32 object-cover rounded"
-                  onLoad={() => console.log('✅ Direct test 2 loaded')}
-                  onError={() => console.log('❌ Direct test 2 failed')}
-                />
               </div>
             </div>
           </div>
